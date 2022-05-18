@@ -1,0 +1,247 @@
+# We will use the reST syntax for documentation.
+
+# The server.py file holds the main server logic.
+# It is responsible for handling the connection between the client and the server.
+# It will accept requests from the client and send them to the appropriate handler.
+# It will also handle the connection to the internal database.
+
+import re
+import socket           #For networking
+import threading        #For multithreading
+import sys              #For exiting the program
+import os               #For file management
+import json             #For JSON parsing and serialization
+import pickle           #For pickling and unpickling
+import time             #For time management
+import hashlib          #For hashing (To be used in message verification)
+import random           #For random number generation
+import string           #For string generation
+import base64           #For base64 encoding and decoding
+import datetime         #For date and time management
+
+def getTimeString():
+    """
+    This method is responsible for generating a time string.
+    """
+    # Get the current time
+    now = datetime.datetime.now()
+    # Return the time as a string (YYYY-MM-DD HH:MM:SS::ms)
+    return now.strftime("%Y-%m-%d %H:%M:%S") + "::" + str(now.microsecond)
+
+def getConsoleTimeString():
+    return "[" + getTimeString() + "] "
+
+def consoleLog(msg):
+    """
+    This method is responsible for logging messages to the console.
+    """
+    print(getConsoleTimeString() + msg)
+
+class Request():
+    """
+    This class is responsible for holding the request.
+    """
+
+    def __init__(self, type, data) -> None:
+        # Init the request
+        self.type = type
+        self.data = data
+
+    def __str__(self) -> str:
+        # Return the request as a string
+        return "Request: " + self.type + " " + self.data
+
+class Response():
+    """
+    This class is responsible for holding the response.
+    """
+
+    def __init__(self, type, data) -> None:
+        # Init the response
+        self.type = type
+        self.data = data
+
+    def __str__(self) -> str:
+        # Return the response as a string
+        return "Response: " + self.type + " " + self.data
+
+class ConnectionHandler():
+    """
+    This class is responsible for handling the connection between the client and the server.
+    It will also be responsible for handling the request
+    """
+    def __init__(self, port, connectionLimit, verbose) -> None:
+        # Init socket
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Bind to the port
+        self.s.bind(('127.0.0.1', port))
+        # Listen for incoming connections
+        self.s.listen(connectionLimit)
+        # Init internal connection pool
+        self.connectionPool = {} # indexed by connection id
+        # Init verbose
+        self.verbose = verbose
+        # Init subThreads pool
+        self.subThreads = []
+        # Create the thread for waiting for connections
+        self.thread = threading.Thread(target=self.waitForConnections, daemon=True)
+        # Start the thread
+        self.thread.start()
+
+    def waitForConnections(self) -> None:
+        """
+        This method is responsible for waiting for incoming connections.
+        It will create a new thread for each incoming connection.
+        """
+        while True:
+            # Accept the connection
+            conn, addr = self.s.accept()
+            # If verbose, print the connection
+            if self.verbose:
+                consoleLog("Connection from: " + str(addr))
+            # Create a unique id for the connection
+            connectionId = self.generateConnectionId()
+            # If verbose, print the connection id
+            if self.verbose:
+                consoleLog("Connection id: " + connectionId)
+            # Add the connection to the pool
+            self.connectionPool[connectionId] = (conn,addr)
+            # Create a new thread for the connection
+            self.subThreads.append(threading.Thread(target=self.handleConnection, args=(connectionId,), daemon=True))
+            # Start the thread
+            self.subThreads[-1].start()
+            # If verbose, print notice
+            if self.verbose:
+                consoleLog("Connection accepted. Connection handler created.")
+    
+    def generateConnectionId(self) -> str:
+        """
+        This method is responsible for generating a unique id for the connection.
+        It will use the current time in milliseconds as the id, concatenated to 8 random nytes.
+        """
+        return str(int(round(time.time() * 1000))) + str(random.getrandbits(8 * 8))
+    
+    def handleConnection(self, connectionId) -> None:
+        """
+        This method is responsible for handling the connection.
+        It will receive the request from the client, and send the response back.
+        """
+        # If verbose, print notice
+        if self.verbose:
+            consoleLog("Connection handler started.")
+        # Get the connection
+        conn, addr = self.connectionPool[connectionId]
+        # Set the timeout to 10 minutes
+        conn.settimeout(600)
+        # Loop until the connection is closed
+        while True:
+            try:
+                # Receive the request
+                request = self.receiveRequest(conn)
+            except socket.timeout:
+                # If the request times out, close the connection
+                self.closeConnection(connectionId)
+                # If verbose, print notice
+                if self.verbose:
+                    consoleLog("Connection " + str(connectionId) + " timed out.")
+                break
+            # If verbose, print the request
+            if self.verbose:
+                consoleLog("Request received: " + str(request))
+        # Process the request
+        response = self.processRequest(request)
+        # Send the response
+        self.sendResponse(conn, response)
+        # If the response is a disconnect, close the connection
+        if response.type == "disconnect":
+            self.closeConnection(connectionId)
+
+    
+    def receiveRequest(self, conn) -> dict:
+        """
+        This method is responsible for receiving the request from the client.
+        """
+        # Receive the request
+        request = pickle.loads(conn.recv(1024))
+        # Return the request
+        return request
+    
+    def processRequest(self, request) -> dict:
+        """
+        This method is responsible for processing the request.
+        """
+        # Create a response (PLACEHOLDER)
+        response = Response("msg", "You wrote " + request.data + "!")
+        # Return the response
+        return response
+    
+    def sendResponse(self, conn, response) -> None:
+        """
+        This method is responsible for sending the response to the client.
+        """
+        # Send the response
+        conn.send(pickle.dumps(response))
+    
+    def closeConnection(self, connectionId) -> None:
+        """
+        This method is responsible for closing the connection.
+        """
+        # Get the connection
+        conn, addr = self.connectionPool[connectionId]
+        # Close the connection
+        conn.close()
+        # Remove the connection from the pool
+        del self.connectionPool[connectionId]
+        # If verbose, print notice
+        if self.verbose:
+            consoleLog("Connection " + str(connectionId) + " closed.")
+        # Terminate the thread
+        self.subThreads.remove(threading.current_thread())
+
+handlersPool = []
+
+def main():
+    """
+    This method is responsible for starting the server.
+    """
+    # Init the server
+    server = ConnectionHandler(5556, 10, verbose= True)
+    # Add the server to the pool
+    handlersPool.append(server)
+
+    # Wait for the user to exit
+    while True:
+        # Get input from the user
+        cmd = input("$ ")
+        # If the user wants to exit, exit the program
+        if cmd == "exit":
+            # If verbose, print notice
+            if server.verbose:
+                consoleLog("Exiting...")
+            # Exit the program (threads are daemon threads, so they will automatically exit)
+            sys.exit()
+        # If the user wants to print the list of connections, print it
+        elif cmd[0:4] == "list":
+            # -noorder prints the pool
+            if "-noorder" in cmd:
+                # If verbose, print notice
+                if server.verbose:
+                    consoleLog("Printing connection pool...")
+                # Print the pool
+                for connection in server.connectionPool:
+                    print(connection)
+            # if no arguments are given, print the threads by handlers
+            else:
+                for handler in handlersPool:
+                    print("Handler: " + str(handler) + "with id: " + str(handler.thread.ident) + " and name: " +
+                          str(handler.thread.name) + " has " + str(len(handler.connectionPool)) + " connections.")
+                    for connection in handler.connectionPool:
+                        print("\t" + connection)
+            
+    
+
+    
+if __name__ == "__main__":
+    main()
+
+    
