@@ -26,16 +26,16 @@ def getTimeString():
     # Get the current time
     now = datetime.datetime.now()
     # Return the time as a string (YYYY-MM-DD HH:MM:SS::ms)
-    return now.strftime("%Y-%m-%d %H:%M:%S") + "::" + str(now.microsecond)
+    return now.strftime("%Y-%m-%d %H:%M:%S")
 
 def getConsoleTimeString():
-    return "[" + getTimeString() + "] "
+    return "[" + getTimeString() + "]"
 
-def consoleLog(msg):
+def consoleLog(msg, sender="Server"):
     """
     This method is responsible for logging messages to the console.
     """
-    print(getConsoleTimeString() + msg)
+    print("\r" + getConsoleTimeString() + " <" + sender + "> " + msg + "\n$ ", end="")
 
 class Request():
     """
@@ -70,13 +70,18 @@ class ConnectionHandler():
     This class is responsible for handling the connection between the client and the server.
     It will also be responsible for handling the request
     """
-    def __init__(self, port, connectionLimit, verbose) -> None:
+
+    def __init__(self, port, maxConnections, verbose) -> None:
+        # Remember the port
+        self.port = port
+        # Remember the connection limit
+        self.maxConnections = maxConnections
         # Init socket
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Bind to the port
         self.s.bind(('127.0.0.1', port))
         # Listen for incoming connections
-        self.s.listen(connectionLimit)
+        self.s.listen(maxConnections)
         # Init internal connection pool
         self.connectionPool = {} # indexed by connection id
         # Init verbose
@@ -98,12 +103,12 @@ class ConnectionHandler():
             conn, addr = self.s.accept()
             # If verbose, print the connection
             if self.verbose:
-                consoleLog("Connection from: " + str(addr))
+                consoleLog("Connection from: " + str(addr), self.thread.name)
             # Create a unique id for the connection
             connectionId = self.generateConnectionId()
             # If verbose, print the connection id
             if self.verbose:
-                consoleLog("Connection id: " + connectionId)
+                consoleLog("Connection id: " + connectionId, self.thread.name)
             # Add the connection to the pool
             self.connectionPool[connectionId] = (conn,addr)
             # Create a new thread for the connection
@@ -112,7 +117,7 @@ class ConnectionHandler():
             self.subThreads[-1].start()
             # If verbose, print notice
             if self.verbose:
-                consoleLog("Connection accepted. Connection handler created.")
+                consoleLog("Connection accepted. Connection handler created.", self.thread.name)
     
     def generateConnectionId(self) -> str:
         """
@@ -128,7 +133,7 @@ class ConnectionHandler():
         """
         # If verbose, print notice
         if self.verbose:
-            consoleLog("Connection handler started.")
+            consoleLog("Connection handler started.", self.thread.name)
         # Get the connection
         conn, addr = self.connectionPool[connectionId]
         # Set the timeout to 10 minutes
@@ -143,11 +148,11 @@ class ConnectionHandler():
                 self.closeConnection(connectionId)
                 # If verbose, print notice
                 if self.verbose:
-                    consoleLog("Connection " + str(connectionId) + " timed out.")
+                    consoleLog("Connection " + str(connectionId) + " timed out.", self.thread.name)
                 break
             # If verbose, print the request
             if self.verbose:
-                consoleLog("Request received: " + str(request))
+                consoleLog("Request received: " + str(request), self.thread.name)
         # Process the request
         response = self.processRequest(request)
         # Send the response
@@ -194,7 +199,7 @@ class ConnectionHandler():
         del self.connectionPool[connectionId]
         # If verbose, print notice
         if self.verbose:
-            consoleLog("Connection " + str(connectionId) + " closed.")
+            consoleLog("Connection " + str(connectionId) + " closed.", self.thread.name)
         # Terminate the thread
         self.subThreads.remove(threading.current_thread())
 
@@ -205,9 +210,13 @@ def main():
     This method is responsible for starting the server.
     """
     # Init the server
-    server = ConnectionHandler(5556, 10, verbose= True)
+    server1 = ConnectionHandler(5556, 10, verbose = True)
+    server2 = ConnectionHandler(5557, 10, verbose = True)
+    server3 = ConnectionHandler(5558, 10, verbose = True)
     # Add the server to the pool
-    handlersPool.append(server)
+    handlersPool.append(server1)
+    handlersPool.append(server2)
+    handlersPool.append(server3)
 
     # Wait for the user to exit
     while True:
@@ -215,29 +224,42 @@ def main():
         cmd = input("$ ")
         # If the user wants to exit, exit the program
         if cmd == "exit":
-            # If verbose, print notice
-            if server.verbose:
-                consoleLog("Exiting...")
+            consoleLog("Exiting...")
             # Exit the program (threads are daemon threads, so they will automatically exit)
             sys.exit()
         # If the user wants to print the list of connections, print it
         elif cmd[0:4] == "list":
             # -noorder prints the pool
             if "-noorder" in cmd:
-                # If verbose, print notice
-                if server.verbose:
-                    consoleLog("Printing connection pool...")
+                print("Printing connection pool...")
                 # Print the pool
-                for connection in server.connectionPool:
-                    print(connection)
+                for handler in handlersPool:
+                    for connection in handler.connectionPool:
+                        print("\r"+connection)
             # if no arguments are given, print the threads by handlers
             else:
                 for handler in handlersPool:
-                    print("Handler: " + str(handler) + "with id: " + str(handler.thread.ident) + " and name: " +
-                          str(handler.thread.name) + " has " + str(len(handler.connectionPool)) + " connections.")
+                    print("Handler " + str(handler.thread.name) + " id " + str(handler.thread.ident) + "\t\t(" + str(len(handler.connectionPool)) + " connections)" + ":")
                     for connection in handler.connectionPool:
                         print("\t" + connection)
-            
+        elif cmd[0:4] == "info":
+            # Print a table of the threads
+            print(  "Handler".center(15)+ "|" +
+                    "Thread".center(15) + "|" +
+                    "Port".center(15)   + "|" +
+                    "Connections".center(15))
+            for handler in handlersPool:
+                threadNameString = str(handler.thread.name)
+                threadIdString = str(handler.thread.ident)
+                threadPortString = str(handler.port)
+                threadConnectionsString = str(len(handler.connectionPool)) + "/" + str(handler.maxConnections)
+                # Add the indents ( default 15 characters per tab )
+                threadNameString = threadNameString.center(15)
+                threadIdString = threadIdString.center(15)
+                threadPortString = threadPortString.center(15)
+                threadConnectionsString = threadConnectionsString.center(15)
+                # Print the table
+                print(threadNameString+"|"+threadIdString+"|"+threadPortString+"|"+threadConnectionsString)
     
 
     
