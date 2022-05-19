@@ -18,6 +18,7 @@ import random           #For random number generation
 import string           #For string generation
 import base64           #For base64 encoding and decoding
 import datetime         #For date and time management
+import argparse         #For parsing command line arguments
 
 def getTimeString():
     """
@@ -212,18 +213,23 @@ class ConnectionHandler():
 
 handlersPool = []
 
-def main():
+def main(handlersNumber, portRange, maxConnections, verbose):
     """
     This method is responsible for starting the server.
+    :param handlersNumber: The number of handlers to create.
+    :param portRange: The port range to use.
+    :param maxConnections: The maximum number of connections per handler.
+    :param verbose: Whether to print the logs.
     """
     # Init the server
-    server1 = ConnectionHandler(5556, 10, verbose = True)
-    server2 = ConnectionHandler(5557, 10, verbose = True)
-    server3 = ConnectionHandler(5558, 10, verbose = True)
-    # Add the server to the pool
-    handlersPool.append(server1)
-    handlersPool.append(server2)
-    handlersPool.append(server3)
+    for i in range(handlersNumber):
+        # Create a new handler
+        try:
+            handlersPool.append(ConnectionHandler(portRange[i], maxConnections, verbose))
+        except Exception as e:
+            # If verbose, print the error
+            if verbose:
+                consoleLog("Couldn't create handler on port " + str(i) + " , skipping it...")
 
     # Wait for the user to exit
     while True:
@@ -255,6 +261,7 @@ def main():
                     "Thread".center(15) + "|" +
                     "Port".center(15)   + "|" +
                     "Connections".center(15))
+            print ("-"*(63))
             for handler in handlersPool:
                 threadNameString = str(handler.thread.name)
                 threadIdString = str(handler.thread.ident)
@@ -271,6 +278,13 @@ def main():
 
     
 if __name__ == "__main__":
-    main()
-
+    # Get the command line arguments
+    parser = argparse.ArgumentParser(description="A server for the chat application.")
+    parser.add_argument("-n", "--handlers", type=int, default=1, help="The number of handlers to create.")
+    parser.add_argument("-p", "--port", type=int, default=5556, help="The first port to use.")
+    parser.add_argument("-m", "--max", type=int, default=10, help="The maximum number of connections per handler.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Whether to print the logs.")
+    args = parser.parse_args()
+    # Start the server
+    main(args.handlers, [args.port + i for i in range(args.handlers)], args.max, args.verbose)
     
