@@ -143,25 +143,32 @@ class ConnectionHandler():
             try:
                 # Receive the request
                 request = self.receiveRequest(conn)
-            except socket.timeout:
+                # Process the request
+                response = self.processRequest(request)
+                # Send the response
+                self.sendResponse(conn, response)
+                # If the response is a disconnect, close the connection
+                if response.type == "disconnect":
+                    self.closeConnection(connectionId)
+            except Exception as e:
                 # If the request times out, close the connection
-                self.closeConnection(connectionId)
-                # If verbose, print notice
-                if self.verbose:
-                    consoleLog("Connection " + str(connectionId) + " timed out.", self.thread.name)
-                break
+                if e == socket.timeout:
+                    self.closeConnection(connectionId)
+                    # If verbose, print notice
+                    if self.verbose:
+                        consoleLog("Connection " + str(connectionId) + " timed out.", self.thread.name)
+                    break
+                # If the host disconnected, close the connection
+                else:
+                    self.closeConnection(connectionId)
+                    # If verbose, print notice
+                    if self.verbose:
+                        consoleLog("Connection " + str(connectionId) + " disconnected.", self.thread.name)
+                    break
             # If verbose, print the request
             if self.verbose:
                 consoleLog("Request received: " + str(request), self.thread.name)
-        # Process the request
-        response = self.processRequest(request)
-        # Send the response
-        self.sendResponse(conn, response)
-        # If the response is a disconnect, close the connection
-        if response.type == "disconnect":
-            self.closeConnection(connectionId)
-
-    
+        
     def receiveRequest(self, conn) -> dict:
         """
         This method is responsible for receiving the request from the client.
