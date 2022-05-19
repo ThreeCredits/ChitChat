@@ -6,7 +6,8 @@ ANCHOR_LEFT = 2
 ANCHOR_TOP = 4
 ANCHOR_BOTTOM = 8
 
-FRAME_BUTTONS_SIZE = 58
+
+LEFT_PANEL_WIDTH = 150
 
 
 def colorSum(color1, color2):
@@ -14,6 +15,14 @@ def colorSum(color1, color2):
     for i in range(len(color1)):
         res.append((color1[i] + color2[i])%256)
     return tuple(res)
+
+
+def paintSprite(surf, color):
+    for i in range(surf.get_height()):
+        for j in range(surf.get_width()):
+            c = surf.get_at((j,i))
+            nc = color if len(c) == 3 else (*color, c[3])
+            surf.set_at((j,i), nc)
 
 
 class ImgButton:
@@ -25,6 +34,7 @@ class ImgButton:
         self.color = color
         self.anchor = anchor
         self.img = img
+
 
     @property
     def absolutePosition(self):
@@ -43,18 +53,18 @@ class ImgButton:
             
         return (x, y)
 
-    def isPressed(self, mx, my):
+    def onTouch(self, mx, my):
         x,y = self.absolutePosition
         return mx >= x and mx <= x + self.size[0]  and  my >= y and my <= y + self.size[1]
 
+
     def draw(self, wn, state):
         c = self.color
-        if state == 1:
-            c = colorSum(self.color,(10,10,10))
-        elif state == 2:
-            c = colorSum(self.color, (-10,-10,-10))
+        if state:
+            c = colorSum(self.color,(-10,-10,-10))
+
         x, y = self.absolutePosition
-        pygame.draw.rect(wn, self.color, (x, y, *self.size))
+        pygame.draw.rect(wn, c, (x, y, *self.size))
         if self.img:
             wn.blit(self.img,(x + self.size[0]/2 - self.img.get_width()/2, y + self.size[1]/2 - self.img.get_height()/2))
         
@@ -62,7 +72,7 @@ class ImgButton:
 
 
 class Window:
-    def __init__(self, wn, width, height, title, font,bgColor, frameColor,  frameHeight, sprites = None):
+    def __init__(self, wn, width, height, title, font,bgColor, color,  frameHeight, buttonsWidth,sprites = None):
         self.wn = wn
         self.sprites = sprites
         self.x = wn.get_width()/2 - width/2
@@ -78,25 +88,34 @@ class Window:
         self.font = font
         
         self.bgColor = bgColor
-        self.frameColor = frameColor
+        self.setColor(color)
         self.frameHeight = frameHeight
+        self.buttonsWidth = buttonsWidth
 
         self.dragging = False
         self.startX = 0
         self.startY = 0
 
-        self.buttons = [ImgButton(FRAME_BUTTONS_SIZE, 0, (FRAME_BUTTONS_SIZE, self.frameHeight),(232,17,35),img = sprites["closeIcon"], parent = self, anchor = ANCHOR_RIGHT|ANCHOR_TOP)]
+        self.buttons = []
+        for i in range(3):
+            self.buttons.append(ImgButton((self.buttonsWidth)*(i+1)-1, 0, (self.buttonsWidth - 1, self.frameHeight-1), self.bgColor, img = sprites[list(sprites.keys())[i]], parent = self, anchor = ANCHOR_RIGHT|ANCHOR_TOP))
         self.buttonDown = None
 
+
+    def setColor(self, color):
+        self.color = color
+        for sprite in self.sprites.values():
+            paintSprite(sprite, color)
+
     def step(self, mx, my, events):
-        if self.dragging:
+        if self.dragging and not self.buttonDown:
             self.x = self.startX + mx
             self.y = self.startY + my
 
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 for b in self.buttons:
-                    if b.isPressed(mx,my):
+                    if b.onTouch(mx,my):
                         print("premuto")
                         self.buttonDown = b
                         continue
@@ -109,7 +128,7 @@ class Window:
             elif event.type == pygame.MOUSEBUTTONUP:
                 self.dragging = False
                 if self.buttonDown:
-                    if self.buttonDown.isPressed(mx,my):
+                    if self.buttonDown.onTouch(mx,my):
                         if self.buttonDown is self.buttons[0]: return False
 
                     self.buttonDown = None
@@ -118,9 +137,27 @@ class Window:
         return True
                     
 
-    def draw(self):
-        pygame.draw.rect(self.wn, self.frameColor, (self.x, self.y, self.width, self.frameHeight))
+    def draw(self, mx, my):
+        title = self.font.render(self.title, True, self.bgColor)
+        
+        pygame.draw.rect(self.wn, self.color, (self.x, self.y, LEFT_PANEL_WIDTH, self.height))
+        pygame.draw.rect(self.wn, self.bgColor, (self.x + LEFT_PANEL_WIDTH,self.y, self.width - LEFT_PANEL_WIDTH, self.frameHeight))
+        pygame.draw.line(self.wn, self.bgColor, (self.x + 1, self.y + self.frameHeight - 1), (self.x + LEFT_PANEL_WIDTH, self.y + self.frameHeight - 1))
+        pygame.draw.line(self.wn, self.color, (self.x + LEFT_PANEL_WIDTH, self.y + self.frameHeight - 1), (self.x + self.width - 2, self.y + self.frameHeight - 1))
+        for i in range(3):
+            pygame.draw.line(self.wn, self.color, (self.x + self.width - self.buttonsWidth*(i+1),self.y + 1),(self.x + self.width - self.buttonsWidth*(i+1), self.y + self.frameHeight))
+
+        self.wn.blit(title, (self.x + 5, self.y + self.frameHeight/2 - title.get_height()/2))
+        #Screen Drawing
+        self.screen.fill(self.bgColor)
+        pygame.draw.rect(self.screen, self.color, (0,0, LEFT_PANEL_WIDTH, self.height))
+
         self.wn.blit(self.screen,(self.x, self.y + self.frameHeight))
         for b in self.buttons:
-            b.draw(self.wn, 0)
-        return b.absolutePosition
+
+            onTouch = 0
+            if b.onTouch(mx, my):
+                onTouch = 1
+
+            b.draw(self.wn, onTouch)
+
