@@ -6,19 +6,23 @@ import win32api
 import win32con
 import win32gui
 
-TRANSPARENT = (255, 0, 128)
-FRAME_HEIGHT = None
-BUTTONS_WIDTH = None
-size = None
-w = None
-h = None
-wn = None
-font1 = None
-sprites = {}
+TRANSPARENT = (255, 0, 128) # Represents transparency
+FRAME_HEIGHT = None         # The upper frame height
+BUTTONS_WIDTH = None        # The width of the upper-right buttons
+size = None                 # The main window size (width, height)
+w = None                    # The main window width
+h = None                    # The main window height
+wn = None                   # The window object
+font1 = None                # The font object
+sprites = {}                # A dict containing surfaces {str : pygame.Surface}
 
 
 
 def init():
+    """
+    A function that initializes the program: creates a transparent window, calculates constans and loads sprites.
+    :returns: None
+    """
     global sprites, font1, size, w, h, wn, FRAME_HEIGHT, BUTTONS_WIDTH
     pygame.init()
 
