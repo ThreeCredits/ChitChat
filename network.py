@@ -1,4 +1,6 @@
 import socket
+from typing import Any, Tuple
+from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
@@ -14,7 +16,7 @@ class Cipher:
         self.prv_key = prv_key
 
 
-    def encrypt(self, msg):
+    def encrypt(self, msg: str) -> Tuple[bytes, bytes, bytes, bytes]:
         '''
         Encrypts the message using AES-256-GCM
         :param msg: The message to be encrypted
@@ -29,7 +31,7 @@ class Cipher:
         return data_base64, enc_session_key, tag, cipher_aes.nonce
 
 
-    def decrypt(self, msg, enc_session_key, tag, nonce) -> str:
+    def decrypt(self, msg: bytes, enc_session_key: bytes, tag: bytes, nonce: bytes) -> str:
         '''
         Decrypts the message using AES-256-GCM
         :param msg: The message to be decrypted
@@ -46,7 +48,7 @@ class Cipher:
 
 
 class Network:
-    def __init__(self, server = "127.0.0.1", port = 5556) -> None:
+    def __init__(self, server: str = "127.0.0.1", port: int = 5556) -> None:
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create a socket
         self.server = server # address of server
         self.port = port # port of server
@@ -62,7 +64,7 @@ class Network:
         self.client.connect(self.addr) # starts new connection
 
 
-    def encrypt(self, msg, key):
+    def encrypt(self, msg: str, key: RSA.RsaKey) -> bytes:
         '''
         Encrypts the message using AES-256-GCM
         :param msg: The message to be encrypted
@@ -73,7 +75,7 @@ class Network:
         return cipher.encrypt(msg)
 
 
-    def decrypt(self, msg, key, enc_session_key, tag, nonce) -> str:
+    def decrypt(self, msg: bytes, key: RSA.RsaKey, enc_session_key: bytes, tag: bytes, nonce: bytes) -> str:
         '''
         Decrypts the message using AES-256-GCM
         :param msg: The message to be decrypted
@@ -87,7 +89,7 @@ class Network:
         return cipher.decrypt(msg, enc_session_key, tag, nonce)
 
 
-    def sendWithResponse(self, data, buffer_size = 2048*16):
+    def sendWithResponse(self, data, buffer_size: int = 2048*16) -> bytes:
         '''
         Sends the data to the server and returns the response
         :param data: The data to be sent
@@ -101,7 +103,7 @@ class Network:
             print("ERROR IN SEND",e)
 
 
-    def send(self, data) -> None:
+    def send(self, data: Any) -> None:
         '''
         Sends the data to the server without returning a response
         :param data: The data to be sent
@@ -112,7 +114,7 @@ class Network:
         except: pass
     
 
-    def sendEEResponse(self, data, key, buffer_size = 2048*16):
+    def sendEEResponse(self, data: Any, key: RSA.RsaKey, buffer_size: int = 2048*16) -> bytes:
         '''
         Sends the encrypted data to the server and returns the response
         :param data: The data to be sent
@@ -127,7 +129,7 @@ class Network:
             print("ERROR IN SEND",e)
 
 
-    def sendEE(self, data, key) -> None:
+    def sendEE(self, data: Any, key: RSA.RsaKey) -> None:
         '''
         Sends the encrypted data to the server without returning a response
         :param data: The data to be sent
@@ -139,7 +141,7 @@ class Network:
         except: pass
     
 
-    def receive(self, buffer_size = 2048*16):
+    def receive(self, buffer_size: int = 2048*16) -> bytes:
         '''
         Returns the data received from the server
         :param buffer_size: The buffer size
@@ -148,7 +150,7 @@ class Network:
         return self.client.recv(buffer_size)
 
 
-    def receiveEE(self, key, buffer_size = 2048*16):
+    def receiveEE(self, key: RSA.RsaKey, buffer_size: int = 2048*16) -> str:
         '''
         Returns the decrypted data received from the server
         :param key: The key to decrypt the data with (private key)
