@@ -89,7 +89,7 @@ class Network:
         return cipher.decrypt(msg, enc_session_key, tag, nonce)
 
 
-    def sendWithResponse(self, data, buffer_size: int = 2048*16) -> bytes:
+    def send_with_response(self, data, buffer_size: int = 2048*16) -> bytes:
         '''
         Sends the data to the server and returns the response
         :param data: The data to be sent
@@ -114,7 +114,7 @@ class Network:
         except: pass
     
 
-    def sendEEResponse(self, data: Any, key: RSA.RsaKey, buffer_size: int = 2048*16) -> bytes:
+    def send_EE_response(self, data: Any, key: RSA.RsaKey, buffer_size: int = 2048*16) -> bytes:
         '''
         Sends the encrypted data to the server and returns the response
         :param data: The data to be sent
@@ -129,7 +129,7 @@ class Network:
             print("ERROR IN SEND",e)
 
 
-    def sendEE(self, data: Any, key: RSA.RsaKey) -> None:
+    def send_EE(self, data: Any, key: RSA.RsaKey) -> None:
         '''
         Sends the encrypted data to the server without returning a response
         :param data: The data to be sent
@@ -150,7 +150,7 @@ class Network:
         return self.client.recv(buffer_size)
 
 
-    def receiveEE(self, key: RSA.RsaKey, buffer_size: int = 2048*16) -> str:
+    def receive_EE(self, key: RSA.RsaKey, buffer_size: int = 2048*16) -> str:
         '''
         Returns the decrypted data received from the server
         :param key: The key to decrypt the data with (private key)
