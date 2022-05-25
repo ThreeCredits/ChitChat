@@ -1,5 +1,6 @@
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
+import platform
 import os
 
 
@@ -12,6 +13,8 @@ class E2EE:
         self.key = RSA.generate(2048) # generate a key pair
         self.dir = '.' + get_random_bytes(16).hex() # create a directory with a random name
         os.makedirs(self.dir) # create a directory with the random name
+        if platform.system() == 'Windows':
+            os.system(f'attrib +h {self.dir}') # hide the directory
         self.export_keys('keys') # export the keys as files
     
 
