@@ -1,228 +1,199 @@
-import pygame
-
-# Anchor constants
-ANCHOR_NULL = 0
-ANCHOR_RIGHT = 1
-ANCHOR_LEFT = 2
-ANCHOR_TOP = 4
-ANCHOR_BOTTOM = 8
+import os
+import tkinter as tk
 
 
-LEFT_PANEL_WIDTH = 150
+from typing import Tuple, Any
+import string
+
+MIN_SIZE = (600, 400)
+TITLE_BAR_HEIGHT = 40
+APP_MAIN_COLOR = "#288278"
+APP_BG_COLOR = "#F9F9F9"
+
+root = None
+hidden_root = None
 
 
-def colorSum(color1, color2):
-    """
-    A function that, given 2 colors, returns the sum of their components.
-    :param color1: The first color (r,g,b,[a])
-    :param color2: The second color (r,g,b,[a])
-    :returns: A color (tuple)
-    """
-    res = []
-    for i in range(len(color1)):
-        res.append((color1[i] + color2[i])%256)
-    return tuple(res)
+
+class GUI:
+    def __init__(self, title: string, size: Tuple[int, int]) -> None:
+        global root, hidden_root
+        self.title = title
+        
+        # Creating a hidden window that handles the minimization of the main window
+        hidden_root = tk.Tk()
+        hidden_root.geometry("0x0")
+        hidden_root.configure(background = APP_MAIN_COLOR)
+        hidden_root.attributes('-alpha', 0)
+        hidden_root.iconbitmap("icon.ico")
+        hidden_root.title(title)
+
+        # Creating the main window
+        root = tk.Toplevel(hidden_root)
+        root.transient(hidden_root)
+        root.geometry(str(size[0]) + "x" + str(size[1]))
+        root.minsize(width = MIN_SIZE[0], height = MIN_SIZE[1]) 
+        # removing frame
+        root.overrideredirect(True)
+
+        root.bind('<Button>', GUI.on_focus)
+        hidden_root.bind('<FocusIn>', GUI.on_focus)
+
+        self.images = {}
+        self.load_images()
+        self.init_widgets()
+
+        root = root
+        root.bind("<Configure>", GUI.on_resize)
+        self.old_pos = self.center(*size)
+        self.old_size = size
+        
+
+        root.mainloop()
 
 
-def paintSprite(surf, color):
-    """
-    A function that, given a reference to a surface and a color, paints all the pixels of the surface with that color.
-    It will be used to paint the buttons icons when the theme is changed.
-    :param surf: A reference to the surface to draw on.
-    :param color: A tuple representing the desired color.
-    :returns: None.
-    """
-    for i in range(surf.get_height()):
-        for j in range(surf.get_width()):
-            c = surf.get_at((j,i))
-            nc = color if len(c) == 3 else (*color, c[3])
-            surf.set_at((j,i), nc)
 
 
-class ImgButton: 
-    """
-    A class representing a rectangular button with an image inside.
-    """
-    def __init__(self, x, y, size, color, img = None, parent = None, anchor = ANCHOR_NULL):
-        self.parent = parent    # A reference to any instance that has a "x" and "y" attribute
-        self.x = x; self.y = y  # x&y coordinates relative to the parent 
-        self.size = size        # A 2-uple that contains the width and height of the button
-        self.color = color      # It's used as background color for the button
-        self.anchor = anchor    # A mask representing the anchor relative to the given parent
-        self.img = img          # A reference to the surface to draw inside the button
-
-
-    @property
-    def absolutePosition(self):
+    @staticmethod
+    def on_resize(event: Any) -> None:
         """
-        This method is used to get the button position relative to the screen.
-        :returns: A 2-uple with the absolute position of the button.
+        Fixes the proportion between the side panel and the main frame when the window is resized
         """
-        x = self.x
-        y = self.y
-        if not self.parent or self.anchor == ANCHOR_NULL: return (x,y) # if there is no parent or anchor then the button position is already absolute.
-        # Now we differenciate the orizontal anchor
-        if self.anchor & ANCHOR_RIGHT:
-            x = self.parent.x + self.parent.width-x
-        elif self.anchor & ANCHOR_LEFT:
-            x = self.parent.x + x
-
-        # Same as above but for vertical anchor
-        if self.anchor & ANCHOR_BOTTOM:
-            y = self.parent.height-y
-        elif self.anchor & ANCHOR_TOP:
-            y = self.parent.y + y
+        global root
+        if event.widget.widgetName == "toplevel":
+            #print("resize to w:", event.width, "h:", event.height)
+            #1/7 = 0.14285714285714285,   0.2857142857142857
+            """perc = (event.width - MIN_SIZE[0])/(root.winfo_screenwidth() - MIN_SIZE[0])
+            p2 = (1 + perc)/7
+            p2 *= root.winfo_screenwidth()
+            p2 = round(p2)
+            root.winfo_children()[0].grid_columnconfigure(0, weight= MIN_SIZE[0])
+            root.winfo_children()[0].grid_columnconfigure(1, weight= root.winfo_screenwidth() * p2)"""
+            perc = (event.width - MIN_SIZE[0])/(root.winfo_screenwidth() - MIN_SIZE[0])
+            p2 = (0.7 + perc)/7
+            p2 *= root.winfo_screenwidth()
+            p2 = round(p2)
+            root.winfo_children()[0].grid_columnconfigure(0, weight = 100)
+            root.winfo_children()[0].grid_columnconfigure(1, weight = p2)
             
-        return (x, y)
 
-    def onTouch(self, mx, my):
+    def center(self, width: int, height: int) -> Tuple[int, int]:
         """
-        This method is used to check if the cursor is colliding with the button.
-        :param mx: The absolute cursor x position.
-        :param my: The absolute cursor y position.
-        :returns: A boolean representing whether the button is being touched by the cursor or not.
+        Centers the window in the screen.
+        Returns the window position.
         """
-        x,y = self.absolutePosition
-        return mx >= x and mx <= x + self.size[0]  and  my >= y and my <= y + self.size[1]
+        global root
+        x = root.winfo_screenwidth()/2 - width/2
+        y = root.winfo_screenheight()/2 - height/2
+        root.geometry('+%d+%d'%(x,y))
+        return x, y
+
+    @staticmethod
+    def start_move(event: Any) -> None:
+        root.x = event.x
+        root.y = event.y
+
+    @staticmethod
+    def stop_move(event: Any) -> None:
+        root.x = None
+        root.y = None
+
+    @staticmethod
+    def do_move(event: Any) -> None:
+        deltax = event.x - root.x
+        deltay = event.y - root.y
+        x = root.winfo_x() + deltax
+        y = root.winfo_y() + deltay
+        root.geometry(f"+{x}+{y}")
+
+    @staticmethod
+    def minimize() -> None:
+        global hidden_root
+        hidden_root.iconify()
+
+    @staticmethod
+    def quit() -> None:
+        global hidden_root
+        hidden_root.destroy()
+
+    @staticmethod
+    def on_focus(event: Any) -> None:
+        global root
+        root.lift()
+
+    def toggle_fullscreen(self) -> None:
+        """
+        If the app is in fullscreen, resets it to its previous size and position, otherwise resizes it in fullscreen
+        """
+        global root
+        if root.winfo_width() == root.winfo_screenwidth() and root.winfo_height() == root.winfo_screenheight():
+            root.geometry('%dx%d+%d+%d' % (*self.old_size, *self.old_pos))
+            return 
+
+        self.old_pos = (root.winfo_x(), root.winfo_y())
+        self.old_size = (root.winfo_width(), root.winfo_height())
+        root.geometry('%dx%d+%d+%d' % (root.winfo_screenwidth(), root.winfo_screenheight(), 0, 0))
 
 
-    def draw(self, wn, state):
+    def load_images(self) -> None:
         """
-        This method renders the button on a given surface using its coordinates.
-        :param wn: A reference to the surface where the button will be drawn.
-        :param state: A boolean representing whether the button is being touched by the cursor or not.
+        Loads the buttons images.
         """
-        c = self.color
-        # If the button is being hovered on, its color will be darker
-        # TODO: Variable hover color 
-        if state:
-            c = colorSum(self.color,(-10,-10,-10))
+        for filename in os.listdir("sprites/buttons"):
+            if filename.endswith(".png"):
+                self.images[filename.replace(".png", "")] = tk.PhotoImage(file = "sprites/buttons/" + filename)
 
-        # We want to use the absolute button position, because we are drawing it directly on the screen
-        x, y = self.absolutePosition
-        pygame.draw.rect(wn, c, (x, y, *self.size))
-        if self.img:
-            wn.blit(self.img,(x + self.size[0]/2 - self.img.get_width()/2, y + self.size[1]/2 - self.img.get_height()/2))
+
+    def init_widgets(self) -> None:
+        """
+        Creates the window structure and main components
+        """
+        global root
+        # Create main container
+        self.main_container = tk.Frame(root)
+        self.main_container.grid_columnconfigure(0, weight=1)
+        self.main_container.grid_columnconfigure(1, weight=3)
+        self.main_container.rowconfigure(0, weight = 1)
+        self.main_container.pack(expand=True, fill = tk.BOTH)
+
+        # Create side panel frame
+        self.side_panel_frame = tk.Frame(self.main_container, bg = APP_MAIN_COLOR)
+        self.side_panel_frame.grid(row = 0, column = 0, sticky = "news")
+
+        #tk.Label(self.side_panel_frame, text = "side panel").pack()
+
+        # Create main frame
+        self.main_frame = tk.Frame(self.main_container, bg = APP_BG_COLOR)
+        self.main_frame.grid(row = 0, column = 1, sticky = "news")
+
+        # Title bar 
+        self.titleBar = tk.Frame(self.main_frame, bg = APP_BG_COLOR)
+        # Close button
+        tk.Button(self.titleBar, image = self.images["close1"], border = 0, command = GUI.quit).pack(side = tk.RIGHT)
+        tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
+
+        # Resize button
+        tk.Button(self.titleBar, image = self.images["dimension1"], border = 0, command = self.toggle_fullscreen).pack(side = tk.RIGHT)
+        tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
+
+        # Minimize button
+        tk.Button(self.titleBar, image = self.images["minimize1"], border = 0, command = GUI.minimize).pack(side = tk.RIGHT)
+        tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
+
+        t = tk.Label(self.titleBar, text = self.title, bg = APP_BG_COLOR)
+        t.pack(side = tk.LEFT)
+
+        self.titleBar.pack(fill = tk.BOTH)
+        t.bind('<ButtonPress-1>', GUI.start_move)
+        t.bind('<ButtonRelease-1>', GUI.stop_move)
+        t.bind('<B1-Motion>', GUI.do_move)
+        self.titleBar.bind('<ButtonPress-1>', GUI.start_move)
+        self.titleBar.bind('<ButtonRelease-1>', GUI.stop_move)
+        self.titleBar.bind('<B1-Motion>', GUI.do_move)
+
+        # Horizonatal separator
+        tk.Frame(self.main_frame, bg = APP_MAIN_COLOR).pack(fill = tk.BOTH)
+
         
-    
 
-
-class Window:
-    """
-    The Window class represents a frameless window that will be drawn on the main transparent window.
-    """
-    def __init__(self, wn, width, height, title, font,bgColor, color,  frameHeight, buttonsWidth,sprites = None):
-        self.wn = wn                                    # A reference to the pygame window where the window will be drawn
-        self.sprites = sprites                          # A dictionary containing surfaces indexed by their name
-        self.x = wn.get_width()/2 - width/2             # The window coordinates(it starts at the center of the screen)
-        self.y = wn.get_height()/2 - height/2
-
-        self.screen = pygame.Surface((width, height))   # The window surface           
-
-        self.width = width                              # The window size
-        self.height = height
-
-        self.title = title                              # The window title
-        self.font = font                                # The window font
         
-        self.bgColor = bgColor                          # The background color
-        self.color = None                               # The window main color
-        self.setColor(color)                            # Sets the window color
-        self.frameHeight = frameHeight                  # The upper frame height
-        self.buttonsWidth = buttonsWidth                # The width of the upper-right buttons
-
-        self.dragging = False                           # A boolean that indicates if the window is being dragged
-        self.startX = 0                                 # The relative position of the window to the mouse, when the drag starts
-        self.startY = 0
-
-        # Generating the upper-right buttons
-        self.buttons = []
-        for i in range(3):
-            self.buttons.append(ImgButton((self.buttonsWidth)*(i+1)-1, 0, (self.buttonsWidth - 1, self.frameHeight-1), self.bgColor, img = sprites[list(sprites.keys())[i]], parent = self, anchor = ANCHOR_RIGHT|ANCHOR_TOP))
-        self.buttonDown = None                          # A reference to the last button pressed (becomes None when a button is released)
-
-
-    def setColor(self, color):
-        """
-        This method is used to change the window main color.
-        :param color: a tuple representing the desired color.
-        :returns: None.
-        """
-        self.color = color
-        for sprite in self.sprites.values():
-            paintSprite(sprite, color)
-
-    def step(self, mx, my, events):
-        """
-        This method updates the window state.
-        :param mx: The absolute cursor x position.
-        :param my: The absolute cursor y position.
-        :param events: A list of pygame events.
-        :returns: A boolean that represents if the window has been closed.
-        """
-
-        # If the window is being dragged it will follow the cursor, only if there is no button pressed
-        if self.dragging and not self.buttonDown:
-            self.x = self.startX + mx
-            self.y = self.startY + my
-
-        for event in events:
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                for b in self.buttons:
-                    if b.onTouch(mx,my):
-                        self.buttonDown = b # We store that this button is being pressed
-                        break               # We break from the loop because there cannot be more than one button pressed at the same time.
-                
-                # Checking if the window is being dragged by its frame
-                if mx >= self.x and mx <= self.x + self.width  and  my >= self.y and my <= self.y + self.frameHeight:
-                    self.dragging = True
-                    self.startX = self.x - mx
-                    self.startY = self.y - my
-
-            elif event.type == pygame.MOUSEBUTTONUP:
-                self.dragging = False # Window drag ends
-                # If the cursor still hovers on the button, it will trigger its functionality
-                if self.buttonDown:
-                    if self.buttonDown.onTouch(mx,my):
-                        if self.buttonDown is self.buttons[0]: return False
-
-                    self.buttonDown = None
-
-
-        return True
-                    
-
-    def draw(self, mx, my):
-        """
-        This method draws the window on the screen.
-        :param mx: The absolute cursor x position.
-        :param my: The absolute cursor y position.
-        :returns: None.
-        """
-        title = self.font.render(self.title, True, self.bgColor) # rendering the title text
-        
-        # Drawing the upper frame
-        pygame.draw.rect(self.wn, self.color, (self.x, self.y, LEFT_PANEL_WIDTH, self.height))
-        pygame.draw.rect(self.wn, self.bgColor, (self.x + LEFT_PANEL_WIDTH,self.y, self.width - LEFT_PANEL_WIDTH, self.frameHeight))
-        pygame.draw.line(self.wn, self.bgColor, (self.x + 1, self.y + self.frameHeight - 1), (self.x + LEFT_PANEL_WIDTH, self.y + self.frameHeight - 1))
-        pygame.draw.line(self.wn, self.color, (self.x + LEFT_PANEL_WIDTH, self.y + self.frameHeight - 1), (self.x + self.width - 2, self.y + self.frameHeight - 1))
-        for i in range(3):
-            pygame.draw.line(self.wn, self.color, (self.x + self.width - self.buttonsWidth*(i+1),self.y + 1),(self.x + self.width - self.buttonsWidth*(i+1), self.y + self.frameHeight))
-
-        self.wn.blit(title, (self.x + 5, self.y + self.frameHeight/2 - title.get_height()/2))
-        
-        # Drawing the window content
-        self.screen.fill(self.bgColor)
-        pygame.draw.rect(self.screen, self.color, (0,0, LEFT_PANEL_WIDTH, self.height))
-
-        # Drawing the window on the screen
-        self.wn.blit(self.screen,(self.x, self.y + self.frameHeight))
-
-        # Drawing the buttons
-        for b in self.buttons:
-            # If the cursor is hovering the button we will pass it as argument
-            onTouch = 0
-            if b.onTouch(mx, my):
-                onTouch = 1
-            b.draw(self.wn, onTouch)
-
