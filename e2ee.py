@@ -5,30 +5,44 @@ import os
 
 
 class E2EE:
-    def __init__(self) -> None:
+    def __init__(self, name = None) -> None:
         '''
         Generate a public/private key pair using 2048 bits key length
         :returns: None
         '''
-        self.key = RSA.generate(2048) # generate a key pair
-        self.dir = '.' + get_random_bytes(16).hex() # create a directory with a random name
-        os.makedirs(self.dir) # create a directory with the random name
-        if platform.system() == 'Windows':
-            os.system(f'attrib +h {self.dir}') # hide the directory
-        self.export_keys('keys') # export the keys as files
-    
+        if name is None:
+            self.keys = RSA.generate(2048) # generate a key pair
+            self.dir = '.' + get_random_bytes(16).hex() # create a directory with a random name
+            os.makedirs(self.dir) # create a directory with the random name
+            if platform.system() == 'Windows':
+                os.system(f'attrib +h {self.dir}') # hide the directory
+            
+            with open(f'{self.dir}/keys.pem', 'wb') as f: # export keys as PEM file
+                f.write(self.keys.export_key('PEM'))
+        else:
+            self.dir = '.' + name
+            self.keys = self.load_keys_from_file()
 
-    def export_keys(self, file_name: str) -> None:
+    
+    def load_keys_from_file(self) -> RSA.RsaKey:
         '''
-        Exports the private and public keys to a file
+        Imports private and public keys to a file
         :param file_name: The name of the file
         :returns: None
         '''
-        with open(f'{self.dir}/{file_name}', 'wb') as f:
-            f.write(self.key.exportKey('PEM'))
+        with open(f'{self.dir}/keys.pem', 'r') as f:
+            keys = RSA.import_key(f.read())
+        return keys
 
-        with open(f'{self.dir}/{file_name}.pub', 'wb') as f:
-            f.write(self.key.publickey().exportKey('PEM'))
+    
+    def export_public_key(self, UID: str) -> None:
+        '''
+        Exports public key to a file
+        :param UID: User's unique ID
+        :returns: None
+        '''
+        with open(f'{self.dir}/{UID}.pub', 'wb') as f:
+            f.write(self.keys.publickey().exportKey('PEM'))
 
 
     def get_private_key(self) -> RSA.RsaKey:
@@ -36,9 +50,7 @@ class E2EE:
         Returns the private key
         :returns: Rsakey object
         '''
-        with open(f'{self.dir}/keys', 'rb') as f:
-            key = RSA.import_key(f.read())
-        return key
+        return self.keys
 
 
     def get_public_key(self) -> RSA.RsaKey:
@@ -46,9 +58,7 @@ class E2EE:
         Returns the public key
         :returns: Rsakey object
         '''
-        with open(f'{self.dir}/keys.pub', 'rb') as f:
-            key = RSA.import_key(f.read())
-        return key
+        return self.keys.publickey()
 
 
     def get_keys(self) -> dict:

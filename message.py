@@ -1,4 +1,3 @@
-from cipher import *
 import pickle
 
 def sendCipheredMessage(message, client, cipher):

@@ -45,7 +45,7 @@ class KeyExchanger:
             # We send a message to the client to tell him what port he should connect to
             client_socket = self.server.request_port()
             # Send ciphered message
-            sendCipheredMessage(PortMessage(port), client, self.server.key_master.cipher_of(address))
+            sendCipheredMessage(PortMessage(client_socket.port), client, self.server.key_master.cipher_of(address))
             # Now that we sent the port, we can close the connection and start the client socket
             client_socket.run()
         # We close the connection
