@@ -129,6 +129,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-testpic.png
 test.py
+test2.py
+test3.py
 generate_icons.py
