@@ -175,13 +175,13 @@ class GUI:
                 root.geometry('%dx%d+%d+%d' % (*root.old_size, *root.old_pos))
             else:
                 root.geometry('%dx%d' % root.old_size)
-            root.winfo_children()[0].winfo_children()[1].winfo_children()[0].winfo_children()[2].config(image = images["dimension1"])
+            root.winfo_children()[0].winfo_children()[1].winfo_children()[0].winfo_children()[2].config(image = images["dimension21"])
             return 
 
         root.old_pos = (root.winfo_x(), root.winfo_y())
         root.old_size = (root.winfo_width(), root.winfo_height())
         root.geometry('%dx%d+%d+%d' % (root.winfo_screenwidth(), root.winfo_screenheight(), 0, 0))
-        root.winfo_children()[0].winfo_children()[1].winfo_children()[0].winfo_children()[2].config(image = images["dimension21"])
+        root.winfo_children()[0].winfo_children()[1].winfo_children()[0].winfo_children()[2].config(image = images["dimension1"])
 
     @staticmethod
     def load_images() -> None:
@@ -306,7 +306,7 @@ class GUI:
         tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
 
         #*** Resize button
-        self.resize_button = tk.Button(self.titleBar, image = images["dimension1"], border = 0, command = GUI.toggle_fullscreen).pack(side = tk.RIGHT)
+        self.resize_button = tk.Button(self.titleBar, image = images["dimension21"], border = 0, command = GUI.toggle_fullscreen).pack(side = tk.RIGHT)
         tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
 
         #*** Minimize button
