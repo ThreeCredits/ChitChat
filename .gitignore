@@ -132,4 +132,9 @@ dmypy.json
 test.py
 test2.py
 test3.py
+test4.py
 generate_icons.py
+note.txt
+e2ee.py
+cipher.py
+message.py
