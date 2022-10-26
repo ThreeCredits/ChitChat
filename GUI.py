@@ -276,6 +276,9 @@ class NoFrame(tk.Toplevel):
     
     def is_fullscreen(self) -> bool:
         return self.winfo_width() == self.winfo_screenwidth() and self.winfo_height() == self.winfo_screenheight()
+    
+    def toggle_fullscreen(self) -> None:
+        return
 
 
 
@@ -306,9 +309,30 @@ class LoginGUI(NoFrame):
         green_frame.pack(fill = tk.X)
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
         title_frame.pack(fill = tk.X, padx = 15)
+
+
         
-        tk.Label(title_frame, image = self.image, border = 0).pack(side = tk.LEFT)
-        tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 38, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR).pack(side = tk.RIGHT)
+        l1 = tk.Label(title_frame, image = self.image, border = 0)
+        l1.pack(side = tk.LEFT)
+        l2 = tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 38, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR)
+        l2.pack(side = tk.RIGHT)
+
+        ###
+        green_frame.bind('<ButtonPress-1>', self.start_move)
+        green_frame.bind('<ButtonRelease-1>', self.stop_move)
+        green_frame.bind('<B1-Motion>', self.do_move)
+        title_frame.bind('<ButtonPress-1>', self.start_move)
+        title_frame.bind('<ButtonRelease-1>', self.stop_move)
+        title_frame.bind('<B1-Motion>', self.do_move)
+        l1.bind('<ButtonPress-1>', self.start_move)
+        l1.bind('<ButtonRelease-1>', self.stop_move)
+        l1.bind('<B1-Motion>', self.do_move)
+        l2.bind('<ButtonPress-1>', self.start_move)
+        l2.bind('<ButtonRelease-1>', self.stop_move)
+        l2.bind('<B1-Motion>', self.do_move)
+        ###
+
+
 
         username_tag_frame = tk.Frame(self, bg = APP_BG_COLOR)
         username_tag_frame.grid_columnconfigure(0, weight = 2)
@@ -328,7 +352,7 @@ class LoginGUI(NoFrame):
         self.tag.pack(fill = tk.X, padx = 3)
 
         tk.Label(self, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack()
-        self.password = tk.Entry(self, width = 0, background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password = tk.Entry(self, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password.pack(fill = tk.X, padx = 10)
 
 
@@ -393,6 +417,7 @@ class LoggedGUI(NoFrame):
             p2 = round(p2)
             self.winfo_children()[0].grid_columnconfigure(0, weight = 100)
             self.winfo_children()[0].grid_columnconfigure(1, weight = p2)
+
 
     def toggle_fullscreen(self, position_reset: bool = True) -> None:
         """
