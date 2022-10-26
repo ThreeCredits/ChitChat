@@ -1,3 +1,4 @@
+# CONSIDER REMOVING THIS FILE
 import socket
 from typing import Any
 from Crypto.PublicKey import RSA
@@ -19,33 +20,6 @@ class Network:
         :returns: None
         '''
         self.client.connect(self.addr) # starts new connection
-
-
-    def encrypt(msg: str, key: RSA.RsaKey) -> bytes:
-        '''
-        Encrypts the message using AES-256-GCM
-        :param msg: The message to be encrypted
-        :param key: The key to encrypt the message with (public key)
-        :returns: returns the encrypted message, the encrypted session key, the authentication tag, and the nonce
-        :legacy: to be removed
-        '''
-        cipher = Cipher(key, None)
-        return cipher.encrypt(msg)
-
-
-    def decrypt(msg: bytes, key: RSA.RsaKey, enc_session_key: bytes, tag: bytes, nonce: bytes) -> str:
-        '''
-        Decrypts the message using AES-256-GCM
-        :param msg: The message to be decrypted
-        :param key: The key to decrypt the message with (private key)
-        :param enc_session_key: The encrypted session key
-        :param tag: The authentication tag
-        :param nonce: The nonce
-        :returns: returns the decrypted message (str)
-        :legacy: to be removed
-        '''
-        cipher = Cipher(None, key)
-        return cipher.decrypt(msg, enc_session_key, tag, nonce)
 
 
     def send_with_response(self, data, buffer_size: int = 2048*16) -> bytes:

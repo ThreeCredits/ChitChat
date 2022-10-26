@@ -5,27 +5,27 @@ import platform
 import os
 
 
-class E2EE:
-    def __init__(self, name = None, keystr = None) -> None:
+class Identity:
+    def __init__(self, name = None) -> None:
         '''
         Generate a public/private key pair using 2048 bits key length
         :returns: None
         '''
         if name is None:
-            if keystr is None:
-                self.keys = RSA.generate(2048) # generate a key pair
-                self.dir = '.' + get_random_bytes(16).hex() # create a directory with a random name
-                os.makedirs(self.dir) # create a directory with the random name
-                if platform.system() == 'Windows':
-                    os.system(f'attrib +h {self.dir}') # hide the directory
-                
-                with open(f'{self.dir}/keys.pem', 'wb') as f: # export keys as PEM file
-                    f.write(self.keys.export_key('PEM'))
-            else:
-                self.keys = self.load_keys_from_bytes(keystr)
+            self.keys = RSA.generate(2048) # generate a key pair
+            self.dir = '.' + get_random_bytes(16).hex() # create a directory with a random name
+            os.makedirs(self.dir) # create a directory with the random name
+            if platform.system() == 'Windows':
+                os.system(f'attrib +h {self.dir}') # hide the directory
+            
+            with open(f'{self.dir}/keys.pem', 'wb') as f: # export keys as PEM file
+                f.write(self.keys.export_key('PEM'))
         else:
             self.dir = '.' + name
             self.keys = self.load_keys_from_file()
+        
+        self.prv_key = self.keys # get the private key
+        self.pub_key = self.keys.publickey() # get the public key
 
     
     def load_keys_from_file(self) -> RSA.RsaKey:
@@ -39,14 +39,13 @@ class E2EE:
         return keys
 
     
-    def load_keys_from_bytes(self, keystr: bytes) -> RSA.RsaKey:
+    def load_pub_key_from_bytes(self, keystr: bytes) -> None:
         '''
         Imports private and public keys from bytes
         :param keystr: The bytes to be imported
-        :returns: RSA.RsaKey
+        :returns: None
         '''
-        keys = RSA.import_key(keystr)
-        return keys
+        self.pub_key = RSA.import_key(keystr)
     
 
     def export_private_key(self, UID: str) -> None:
@@ -105,8 +104,7 @@ class E2EE:
         :returns: returns the encrypted message, the encrypted session key, the authentication tag, and the nonce
         :legacy: to be removed
         '''
-        cipher = Cipher(self.get_public_key(), None)
-        return cipher.encrypt(msg)
+        return Cipher.encrypt(self.get_public_key(), msg)
 
 
     def decrypt(self, msg: bytes, enc_session_key: bytes, tag: bytes, nonce: bytes) -> str:
@@ -119,5 +117,4 @@ class E2EE:
         :returns: returns the decrypted message (str)
         :legacy: to be removed
         '''
-        cipher = Cipher(None, self.get_private_key())
-        return cipher.decrypt(msg, enc_session_key, tag, nonce)
+        return Cipher.decrypt(self.get_private_key(), msg, enc_session_key, tag, nonce)
