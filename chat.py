@@ -1,6 +1,5 @@
 import datetime
 from typing import Tuple, Any, List
-import string
 
 class Chat:
     pass
@@ -13,7 +12,7 @@ class ChatMessage:
         self.date = date
 
 class Chat:
-    def __init__(self, chat_name: string, image_name: string, users: List[str] = []):
+    def __init__(self, chat_name: str, image_name: str, users: List[str] = []):
         self.chat_name = chat_name
         self.image_name = image_name
         self.users = users
