@@ -6,11 +6,20 @@ from constants import *
 from PIL import ImageTk, Image
 from threading import Thread
 from typing import Tuple, Any, List
+from network import Network
 
 
 
 class NoFrame(tk.Toplevel):
+    """
+    Creates a frameless tkinter window that is controlled by an hidden window.
+    """
     def __init__(self, title: str, size: Tuple[int, int], bg: str = "white"):
+        """
+        :param title: the title of the window
+        :param size: a tuple containing the desired width and height
+        :param bg: the background color
+        """
         # Creating a hidden window that handles the minimization of the main window
         self.hidden_root = tk.Tk()
         self.hidden_root.geometry("0x0")
@@ -39,14 +48,23 @@ class NoFrame(tk.Toplevel):
 
 
     def minimize(self) -> None:
+        """
+        minimized the window.
+        """
         self.hidden_root.iconify()
 
 
     def quit(self) -> None:
+        """
+        closes the window.
+        """
         self.hidden_root.destroy()
 
 
     def on_focus(self, event: tk.Event) -> None:
+        """
+        lifts the window.
+        """
         self.lift()
 
     
@@ -64,10 +82,16 @@ class NoFrame(tk.Toplevel):
 
 
     def get_mouse_position(self) -> Tuple[int, int]:
+        """
+        :return: the global mouse position.
+        """
         return self.winfo_pointerx() + self.winfo_x(), self.winfo_pointery() + self.winfo_y()
 
     
     def start_move(self, event: tk.Event) -> None:
+        """
+        Called when the user starts dragging the window, toggles fullscreen if the window was fullscreen.
+        """
         if self.is_fullscreen():
             self.toggle_fullscreen(False)
             mx, my = self.get_mouse_position()
@@ -78,25 +102,36 @@ class NoFrame(tk.Toplevel):
             self.start_y = event.y
         
 
-    def stop_move(self, event: tk.Event) -> None:
-        self.start_x = None
-        self.start_y = None
-        if self.get_mouse_position()[1] < 5:
-            self.toggle_fullscreen()
-
-
     def do_move(self, event: tk.Event) -> None:
+        """
+        Called during the window dragging, updates its position
+        """
         deltax = event.x - self.start_x
         deltay = event.y - self.start_y
         x = self.winfo_x() + deltax
         y = self.winfo_y() + deltay
         self.geometry(f"+{x}+{y}")
-    
+
+
+    def stop_move(self, event: tk.Event) -> None:
+        """
+        Called when the user stops dragging the window, if the window is released on the top of the screen, it switches to fullscreen.
+        """
+        self.start_x = None
+        self.start_y = None
+        if self.get_mouse_position()[1] < 5:
+            self.toggle_fullscreen()
+
     
     def is_fullscreen(self) -> bool:
+        ":return: True if the window is on fullscreen, else False"
         return self.winfo_width() == self.winfo_screenwidth() and self.winfo_height() == self.winfo_screenheight()
     
+
     def toggle_fullscreen(self) -> None:
+        """
+        If the window is not fullscreen, it swhitches to fullscreen and viceversa.
+        """
         return
 
 
@@ -290,12 +325,18 @@ class ConnectGUI(NoFrame):
 
     
     def connect(self) -> None:
+        """
+        Tryes to start a connection with the given server.
+        """
         print("connected")
         self.quit()
         LoginGUI()
 
 
     def create_title_bar(self) -> None:
+        """
+        Creates a custom title bar with the app logo.
+        """
         green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
         green_frame.pack(fill = tk.X)
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
@@ -323,6 +364,9 @@ class ConnectGUI(NoFrame):
 
 
     def init_widgets(self) -> None:
+        """
+        Creates the widgets.
+        """
         server_port_frame = tk.Frame(self, bg = APP_BG_COLOR)
         server_port_frame.grid_columnconfigure(0, weight = 2)
         server_port_frame.grid_columnconfigure(1, weight = 1)
@@ -386,6 +430,9 @@ class LoginGUI(NoFrame):
 
     
     def create_title_bar(self) -> None:
+        """
+        Creates a custom title bar with the app logo.
+        """
         green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
         green_frame.grid(row = 0, column = 0, sticky = "ew")
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
@@ -414,6 +461,9 @@ class LoginGUI(NoFrame):
         ###
     
     def init_register_widgets(self) -> None:
+        """
+        Creates the register widgets.
+        """
         # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
         self.hidden_root.title("ChitChat - Register")
 
@@ -457,6 +507,9 @@ class LoginGUI(NoFrame):
 
 
     def init_login_widgets(self) -> None:
+        """
+        Creates the login widgets.
+        """
         # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
         #for w in self.main_frame.winfo_children():
         #    w.destroy()
@@ -573,6 +626,9 @@ class LoggedGUI(NoFrame):
 
 
     def load_chats(self):
+        """
+        Creates a chat preview in the side panel for every chat
+        """
         for chat in self.chats:
             chat_preview = ChatPreview(self.chats_canvas.frame, self, chat)
             chat_preview.pack(fill = tk.X)
@@ -580,6 +636,9 @@ class LoggedGUI(NoFrame):
 
 
     def load_messages(self):
+        """
+        Loads the messages of the current chat
+        """
         # Destroy & create new scrollable frame
         self.messages_canvas.grid_forget()
         self.messages_canvas.destroy()
