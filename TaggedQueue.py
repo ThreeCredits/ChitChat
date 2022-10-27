@@ -74,14 +74,14 @@ class TaggedQueue():
         # We return the job tag
         return job_tag
 
-    def put_response(self, job: Job, response: Response):
+    def put_response(self, job_tag: int, response: Response):
         """
         Puts a response in the queue
         """
         # We store the response
-        self.responses[job.job_tag] = response
+        self.responses[job_tag] = response
 
-    def wait_for_result(self, tag, timeout: int = QUEUE_RESPONSE_TIMEOUT):
+    def wait_for_result(self, tag, timeout: int = QUEUE_RESPONSE_TIMEOUT) -> Response:
         """
         Waits for a result with the given tag
         """
