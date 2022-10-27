@@ -9,9 +9,95 @@ from typing import Tuple, Any, List
 
 
 
+class NoFrame(tk.Toplevel):
+    def __init__(self, title: str, size: Tuple[int, int], bg: str = "white"):
+        # Creating a hidden window that handles the minimization of the main window
+        self.hidden_root = tk.Tk()
+        self.hidden_root.geometry("0x0")
+        self.hidden_root.configure(background = APP_MAIN_COLOR)
+        self.hidden_root.attributes('-alpha', 0)
+        self.hidden_root.iconbitmap("icon.ico")
+        self.hidden_root.title(title)
+        
+        
+        # Creating the main window
+        tk.Toplevel.__init__(self, master = self.hidden_root, bg = bg)
+        self.transient(self.hidden_root)
+        self.geometry(str(size[0]) + "x" + str(size[1])) 
+        
+        # removing frame
+        self.overrideredirect(True)
 
-class GUI:
-    pass
+        self.bind('<Button>', self.on_focus)
+        self.hidden_root.bind('<FocusIn>', self.on_focus)
+
+        for i in range(2): self.old_pos = self.center()
+
+        self.start_x = None
+        self.start_y = None
+        self.old_size = size
+
+
+    def minimize(self) -> None:
+        self.hidden_root.iconify()
+
+
+    def quit(self) -> None:
+        self.hidden_root.destroy()
+
+
+    def on_focus(self, event: tk.Event) -> None:
+        self.lift()
+
+    
+    def center(self) -> Tuple[int, int]:
+        """
+        Centers the window in the screen.
+        Returns the window position.
+        """
+        self.update()
+        x = self.winfo_screenwidth()/2 - self.winfo_width()/2
+        y = self.winfo_screenheight()/2 - self.winfo_height()/2
+        self.geometry('+%d+%d'%(x,y))
+        print(self.winfo_width(),self.winfo_height())
+        return x, y
+
+
+    def get_mouse_position(self) -> Tuple[int, int]:
+        return self.winfo_pointerx() + self.winfo_x(), self.winfo_pointery() + self.winfo_y()
+
+    
+    def start_move(self, event: tk.Event) -> None:
+        if self.is_fullscreen():
+            self.toggle_fullscreen(False)
+            mx, my = self.get_mouse_position()
+            self.start_x = event.x//self.old_size[0]
+            self.start_y = event.y//self.old_size[1]
+        else:
+            self.start_x = event.x
+            self.start_y = event.y
+        
+
+    def stop_move(self, event: tk.Event) -> None:
+        self.start_x = None
+        self.start_y = None
+        if self.get_mouse_position()[1] < 5:
+            self.toggle_fullscreen()
+
+
+    def do_move(self, event: tk.Event) -> None:
+        deltax = event.x - self.start_x
+        deltay = event.y - self.start_y
+        x = self.winfo_x() + deltax
+        y = self.winfo_y() + deltay
+        self.geometry(f"+{x}+{y}")
+    
+    
+    def is_fullscreen(self) -> bool:
+        return self.winfo_width() == self.winfo_screenwidth() and self.winfo_height() == self.winfo_screenheight()
+    
+    def toggle_fullscreen(self) -> None:
+        return
 
 
 
@@ -95,7 +181,7 @@ class ChatPreview(tk.Frame):
     """
     Creates a frame that allows to visualize the preview (name, picture, last message) of a given chat.
     """
-    def __init__(self, parentObject: tk.Frame, gui: GUI, chat: Chat) -> None:
+    def __init__(self, parentObject: tk.Frame, gui: NoFrame, chat: Chat) -> None:
         """
         :param parentObject: will contain the chat preview
         :param gui: the gui object where this widget is contained (needed to access chats)
@@ -159,7 +245,7 @@ class MessageFrame(tk.Frame):
     """
     Creates a speech ballon style message and packs it.
     """
-    def __init__(self, gui: GUI, message: ChatMessage) -> None:
+    def __init__(self, gui: NoFrame, message: ChatMessage) -> None:
         """
         :param gui: the gui object (contains the messages frame)
         :param message: the message to display
@@ -190,123 +276,118 @@ class MessageFrame(tk.Frame):
             self.pack(anchor = "w", padx = 10, pady = 3)
 
 
-class NoFrame(tk.Toplevel):
-    def __init__(self, title: str, size: Tuple[int, int], bg: str = "white"):
-        # Creating a hidden window that handles the minimization of the main window
-        self.hidden_root = tk.Tk()
-        self.hidden_root.geometry("0x0")
-        self.hidden_root.configure(background = APP_MAIN_COLOR)
-        self.hidden_root.attributes('-alpha', 0)
-        self.hidden_root.iconbitmap("icon.ico")
-        self.hidden_root.title(title)
-        
-        
-        # Creating the main window
-        tk.Toplevel.__init__(self, master = self.hidden_root, bg = bg)
-        self.transient(self.hidden_root)
-        self.geometry(str(size[0]) + "x" + str(size[1])) 
-        
-        # removing frame
-        self.overrideredirect(True)
 
-        self.bind('<Button>', self.on_focus)
-        self.hidden_root.bind('<FocusIn>', self.on_focus)
-
-        self.old_pos = self.center()
-
-        self.start_x = None
-        self.start_y = None
-        self.old_size = size
-
-
-    def minimize(self) -> None:
-        self.hidden_root.iconify()
-
-
-    def quit(self) -> None:
-        self.hidden_root.destroy()
-
-
-    def on_focus(self, event: tk.Event) -> None:
-        self.lift()
-
-    
-    def center(self) -> Tuple[int, int]:
-        """
-        Centers the window in the screen.
-        Returns the window position.
-        """
-        self.update()
-        x = self.winfo_screenwidth()/2 - self.winfo_width()/2
-        y = self.winfo_screenheight()/2 - self.winfo_height()/2
-        self.geometry('+%d+%d'%(x,y))
-        print(self.winfo_width(),self.winfo_height())
-        return x, y
-
-
-    def get_mouse_position(self) -> Tuple[int, int]:
-        return self.winfo_pointerx() + self.winfo_x(), self.winfo_pointery() + self.winfo_y()
-
-    
-    def start_move(self, event: tk.Event) -> None:
-        if self.is_fullscreen():
-            self.toggle_fullscreen(False)
-            mx, my = self.get_mouse_position()
-            self.start_x = event.x//self.old_size[0]
-            self.start_y = event.y//self.old_size[1]
-        else:
-            self.start_x = event.x
-            self.start_y = event.y
-        
-
-    def stop_move(self, event: tk.Event) -> None:
-        self.start_x = None
-        self.start_y = None
-        if self.get_mouse_position()[1] < 5:
-            self.toggle_fullscreen()
-
-
-    def do_move(self, event: tk.Event) -> None:
-        deltax = event.x - self.start_x
-        deltay = event.y - self.start_y
-        x = self.winfo_x() + deltax
-        y = self.winfo_y() + deltay
-        self.geometry(f"+{x}+{y}")
-    
-    
-    def is_fullscreen(self) -> bool:
-        return self.winfo_width() == self.winfo_screenwidth() and self.winfo_height() == self.winfo_screenheight()
-    
-    def toggle_fullscreen(self) -> None:
-        return
-
-
-
-
-class LoginGUI(NoFrame):
-    def __init__(self):
-        NoFrame.__init__(self, "ChitChat - Login", LOGIN_SIZE, bg = APP_BG_COLOR)
-
+class ConnectGUI(NoFrame):
+    def __init__(self) -> None:
+        NoFrame.__init__(self, "ChitChat - Connect", CONNECT_SIZE, bg = APP_BG_COLOR)
         self.image = ImageTk.PhotoImage(Image.open("sprites/icon.png"))
 
+        self.create_title_bar()
         self.init_widgets()
 
         self.lift()
         self.mainloop()
 
     
-    def login(self) -> bool:
+    def connect(self) -> None:
+        print("connected")
+        self.quit()
+        LoginGUI()
+
+
+    def create_title_bar(self) -> None:
+        green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
+        green_frame.pack(fill = tk.X)
+        title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
+        title_frame.pack(fill = tk.X, padx = 14)
+
+        l1 = tk.Label(title_frame, image = self.image, border = 0)
+        l1.pack(side = tk.LEFT)
+        l2 = tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 32, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR)
+        l2.pack(side = tk.RIGHT)
+
+        ###
+        green_frame.bind('<ButtonPress-1>', self.start_move)
+        green_frame.bind('<ButtonRelease-1>', self.stop_move)
+        green_frame.bind('<B1-Motion>', self.do_move)
+        title_frame.bind('<ButtonPress-1>', self.start_move)
+        title_frame.bind('<ButtonRelease-1>', self.stop_move)
+        title_frame.bind('<B1-Motion>', self.do_move)
+        l1.bind('<ButtonPress-1>', self.start_move)
+        l1.bind('<ButtonRelease-1>', self.stop_move)
+        l1.bind('<B1-Motion>', self.do_move)
+        l2.bind('<ButtonPress-1>', self.start_move)
+        l2.bind('<ButtonRelease-1>', self.stop_move)
+        l2.bind('<B1-Motion>', self.do_move)
+        ###
+
+
+    def init_widgets(self) -> None:
+        server_port_frame = tk.Frame(self, bg = APP_BG_COLOR)
+        server_port_frame.grid_columnconfigure(0, weight = 2)
+        server_port_frame.grid_columnconfigure(1, weight = 1)
+        server_port_frame.pack(fill = tk.X, padx = 10, pady = 5)
+
+        server_frame = tk.Frame(server_port_frame, bg = APP_BG_COLOR)
+        server_frame.grid(row = 0, column = 0, sticky = "ew")
+        tk.Label(server_frame, text = "Server", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(pady = 3, anchor = "w")
+        self.server = tk.Entry(server_frame, width = 40, background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.server.pack(fill = tk.X, padx = 3)
+
+        port_frame = tk.Frame(server_port_frame, bg = APP_BG_COLOR)
+        port_frame.grid(row = 0, column = 1, sticky = "ew")
+        tk.Label(port_frame, text = "port", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(pady = 3, anchor = "w")
+        self.port = tk.Entry(port_frame, width = 20, background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.port.pack(fill = tk.X, padx = 3)
+
+        self.error = tk.Label(self, text = "Error", fg = "#DF2C2C", bg = APP_BG_COLOR).pack(anchor = "w", padx = 10)
+
+        buttons_frame = tk.Frame(self, bg = APP_BG_COLOR)
+        buttons_frame.pack(side = tk.BOTTOM, fill = tk.BOTH, padx = 10, pady = 5)
+        
+        tk.Button(buttons_frame, text = "Connect", font = (APP_FONT, 12, "bold"), bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, command = self.connect).pack(pady = 2, fill = tk.X)        
+
+        t = tk.Frame(buttons_frame, bg = "#DF2C2C")
+        t.pack(pady = 2, fill = tk.X)
+        t.grid_rowconfigure(0, weight = 1)
+        t.grid_columnconfigure(0, weight = 1)
+        tk.Button(t, text = "Exit", font = (APP_FONT, 12, "bold"), bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = "#DF2C2C", activeforeground = "#DF2C2C", border = 0, command = self.quit).grid(row = 0, column = 0, sticky = "ew", padx = 1, pady = 1)
+
+        
+
+
+class LoginGUI(NoFrame):
+    def __init__(self):
+        NoFrame.__init__(self, "ChitChat - Login", LOGIN_SIZE, bg = APP_BG_COLOR)
+        self.grid_rowconfigure(1, weight = 1)
+        self.grid_columnconfigure(0, weight = 1)
+        self.image = ImageTk.PhotoImage(Image.open("sprites/icon.png"))
+
+        self.create_title_bar()
+        self.main_frame = tk.Frame(self, bg = APP_BG_COLOR)
+        self.main_frame.grid(row = 1, column = 0, sticky = "news")
+        self.init_login_widgets()
+
+        self.lift()
+        self.mainloop()
+
+
+    def register(self) -> None:
+        self.quit()
+        LoggedGUI()
+
+    
+    def login(self) -> None:
         # do login stuff
 
         # if login success...
         self.quit()
         LoggedGUI()
-    
 
-    def init_widgets(self):
-        # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
+    
+    def create_title_bar(self) -> None:
         green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
-        green_frame.pack(fill = tk.X)
+        green_frame.grid(row = 0, column = 0, sticky = "ew")
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
         title_frame.pack(fill = tk.X, padx = 15)
 
@@ -331,10 +412,60 @@ class LoginGUI(NoFrame):
         l2.bind('<ButtonRelease-1>', self.stop_move)
         l2.bind('<B1-Motion>', self.do_move)
         ###
+    
+    def init_register_widgets(self) -> None:
+        # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
+        self.hidden_root.title("ChitChat - Register")
+
+        for w in self.main_frame.winfo_children():
+            w.destroy()
 
 
+        tk.Label(self.main_frame, text = "Username", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
+        self.username = tk.Entry(self.main_frame, width = 0,background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.username.pack(fill = tk.X, padx = 10)
 
-        username_tag_frame = tk.Frame(self, bg = APP_BG_COLOR)
+        tk.Label(self.main_frame, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
+        self.password = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password.pack(fill = tk.X, padx = 10)
+
+        tk.Label(self.main_frame, text = "Confirm Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
+        self.password2 = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password2.pack(fill = tk.X, padx = 10)
+
+
+        self.error = tk.Label(self.main_frame, text = "Error", fg = "#DF2C2C", bg = APP_BG_COLOR).pack(anchor = "w", padx = 10)
+
+        buttons_frame = tk.Frame(self.main_frame, bg = APP_BG_COLOR)
+        buttons_frame.pack(side = tk.BOTTOM, fill = tk.BOTH, padx = 10, pady = 5)
+        
+        tk.Button(buttons_frame, text = "Register", font = (APP_FONT, 12, "bold"), bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, command = self.register).pack(pady = 2, fill = tk.X)
+        
+        t = tk.Frame(buttons_frame, bg = APP_MAIN_COLOR_DARK)
+        t.pack(pady = 2, fill = tk.X)
+        t.grid_rowconfigure(0, weight = 1)
+        t.grid_columnconfigure(0, weight = 1)
+        tk.Button(t, text = "Already a Member? Login", font = (APP_FONT, 12, "bold"), bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = APP_MAIN_COLOR, activeforeground = APP_MAIN_COLOR, border = 0, command = self.init_login_widgets).grid(row = 0, column = 0, sticky = "ew", padx = 1, pady = 1)
+        
+        t = tk.Frame(buttons_frame, bg = "#DF2C2C")
+        t.pack(pady = 2, fill = tk.X)
+        t.grid_rowconfigure(0, weight = 1)
+        t.grid_columnconfigure(0, weight = 1)
+        tk.Button(t, text = "Exit", font = (APP_FONT, 12, "bold"), bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = "#DF2C2C", activeforeground = "#DF2C2C", border = 0, command = self.quit).grid(row = 0, column = 0, sticky = "ew", padx = 1, pady = 1)
+        
+        
+
+
+    def init_login_widgets(self) -> None:
+        # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
+        #for w in self.main_frame.winfo_children():
+        #    w.destroy()
+        self.hidden_root.title("ChitChat - Login")
+
+        for w in self.main_frame.winfo_children():
+            w.destroy()
+
+        username_tag_frame = tk.Frame(self.main_frame, bg = APP_BG_COLOR)
         username_tag_frame.grid_columnconfigure(0, weight = 2)
         username_tag_frame.grid_columnconfigure(1, weight = 1)
         username_tag_frame.pack(fill = tk.X, padx = 10, pady = 15)
@@ -351,25 +482,29 @@ class LoginGUI(NoFrame):
         self.tag = tk.Entry(tag_frame, width = 20, background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.tag.pack(fill = tk.X, padx = 3)
 
-        tk.Label(self, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack()
-        self.password = tk.Entry(self, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        tk.Label(self.main_frame, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
+        self.password = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password.pack(fill = tk.X, padx = 10)
 
 
-        tk.Label(self,text = "", font = (APP_FONT, 1),bg = APP_BG_COLOR).pack(side = tk.BOTTOM)
-        t = tk.Frame(self, bg = "#DF2C2C")
-        t.pack(padx = 10, pady = 2, fill = tk.X, side = tk.BOTTOM)
+        self.error = tk.Label(self.main_frame, text = "Error", fg = "#DF2C2C", bg = APP_BG_COLOR).pack(anchor = "w", padx = 10)
+
+        buttons_frame = tk.Frame(self.main_frame, bg = APP_BG_COLOR)
+        buttons_frame.pack(side = tk.BOTTOM, fill = tk.BOTH, padx = 10, pady = 5)
+        
+        tk.Button(buttons_frame, text = "Login", font = (APP_FONT, 12, "bold"), bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, command = self.login).pack(pady = 2, fill = tk.X)
+        
+        t = tk.Frame(buttons_frame, bg = APP_MAIN_COLOR_DARK)
+        t.pack(pady = 2, fill = tk.X)
+        t.grid_rowconfigure(0, weight = 1)
+        t.grid_columnconfigure(0, weight = 1)
+        tk.Button(t, text = "New Here? Register", font = (APP_FONT, 12, "bold"), bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = APP_MAIN_COLOR, activeforeground = APP_MAIN_COLOR, border = 0, command = self.init_register_widgets).grid(row = 0, column = 0, sticky = "ew", padx = 1, pady = 1)
+        
+        t = tk.Frame(buttons_frame, bg = "#DF2C2C")
+        t.pack(pady = 2, fill = tk.X)
         t.grid_rowconfigure(0, weight = 1)
         t.grid_columnconfigure(0, weight = 1)
         tk.Button(t, text = "Exit", font = (APP_FONT, 12, "bold"), bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = "#DF2C2C", activeforeground = "#DF2C2C", border = 0, command = self.quit).grid(row = 0, column = 0, sticky = "ew", padx = 1, pady = 1)
-        
-        
-        t = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
-        t.pack(padx = 10, pady = 2, fill = tk.X, side = tk.BOTTOM)
-        t.grid_rowconfigure(0, weight = 1)
-        t.grid_columnconfigure(0, weight = 1)
-        tk.Button(t, text = "New Here? Register", font = (APP_FONT, 12, "bold"), bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = APP_MAIN_COLOR, activeforeground = APP_MAIN_COLOR, border = 0, command = self.quit).grid(row = 0, column = 0, sticky = "ew", padx = 1, pady = 1)
-        tk.Button(self, text = "Login", font = (APP_FONT, 12, "bold"), bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, command = self.login).pack(padx = 10, pady = 2, fill = tk.X, side = tk.BOTTOM)
         
 
 
