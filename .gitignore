@@ -1,3 +1,4 @@
+LICENSE
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +128,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+tests/
+generate_icons.py
+note.txt
+e2ee.py
+cipher.py
+message.py
