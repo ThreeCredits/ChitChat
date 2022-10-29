@@ -2,7 +2,10 @@ import socket
 import threading
 import pickle
 import datetime
+from server import Server
+from TaggedQueue import *  
 from cipher import *
+from message import Packet, PacketItem
 
 # Two classes:
 # KeyExchanger : Binds to one port, accepts all incoming connections, used for public e2e keys sharing
@@ -31,13 +34,13 @@ class KeyExchanger:
     
     def _exchange(self, client, address):
         # First, we send our public key
-        client.send(pickle.dumps(KeyMessage(self.public_key))) # TODO: use new message protocol
+        client.send(pickle.dumps( Packet([PacketItem('pub_key', self.public_key)]) )) # TODO: use new message protocol DONE
         # Then, we wait for the client's public key
         message = client.recv(32 * 1024)
         # We unpickle the message
         message = pickle.loads(message)
         # We expect a KeyMessage
-        if not isinstance(message, KeyMessage): # TODO: use new message protocol
+        if message.data[0].type != 'pub_key': # TODO: use new message protocol DONE
             self.server.printv("Invalid message received from " + str(address), level = 1)
         else:
             # We add the client to the list of clients
@@ -45,7 +48,7 @@ class KeyExchanger:
             # We send a message to the client to tell him what port he should connect to
             client_socket = self.server.request_port()
             # Send ciphered message
-            send_ciphered_message(PortMessage(client_socket.port), client, self.server.key_master.cipher_of(address)) # TODO: use new message protocol
+            send_ciphered_message(Packet([PacketItem('port', client_socket.port)]), client, self.server.key_master.cipher_of(address)) # TODO: use new message protocol DONE
             # Now that we sent the port, we can close the connection and start the client socket
             client_socket.run()
         # We close the connection
@@ -79,7 +82,7 @@ class ClientSocket:
             # We wait for the client to send a login message
             message = receive_ciphered_message(self.socket, self.client_key)
             # We expect a LoginMessage
-            if not isinstance(message, LoginMessage): # TODO: use new message protocol
+            if message.data[0].type != 'login': # TODO: use new message protocol DONE
                 self.server.printv("Invalid message received from " + str(self.address), level = 1)
                 self.socket.close()
                 return
@@ -88,15 +91,15 @@ class ClientSocket:
             if login is not None:
                 if login.timeout > datetime.now():
                     # We send a message to the client to tell him that he is in timeout
-                    send_ciphered_message(TimeoutMessage(login.timeout), self.socket, self.client_key) # TODO: use new message protocol
+                    send_ciphered_message(Packet([PacketItem('timeout', login.timeout)]), self.socket, self.client_key) # TODO: use new message protocol DONE
                     login = None
                 else:
                     # If it is, we send a success message
-                    send_ciphered_message(InfoMessage("logged:"+login.nick), self.socket, self.client_key) # TODO: use new message protocol
+                    send_ciphered_message(Packet([PacketItem('info', "logged:"+login.nick)]), self.socket, self.client_key) # TODO: use new message protocol DONE
                 break
             else:
                 # If not, we send a failure message
-                send_ciphered_message(InfoMessage("login failed"), self.socket, self.client_key) # TODO: use new message protocol
+                send_ciphered_message(Packet([PacketItem('info', "login failed")]), self.socket, self.client_key) # TODO: use new message protocol DONE
         
         # If the login is still None, it means that the login failed 3 times or we are in timeout
         if login is None:
@@ -131,7 +134,7 @@ class ClientSocket:
             # We wait for a message from the client
             message = receive_ciphered_message(self.socket, self.client_key)
             # If message is just a keepalive, we ignore it
-            if isinstance(message, KeepAliveMessage): # TODO: use new message protocol
+            if message.data[0].type == 'ping': # TODO: use new message protocol DONE
                 continue
             # We send the message to the server
-            self.server.main_queue.put((login, message))
+            self.server.queue.put((login, message))
