@@ -6,28 +6,40 @@ import os
 
 
 class Identity:
-    def __init__(self, name = None) -> None:
+    def __init__(self, name : str = None, pub_bytes : bytes = None) -> None:
         '''
         Generate a public/private key pair using 2048 bits key length
         :returns: None
         '''
-        if name is None:
-            self.keys = RSA.generate(2048) # generate a key pair
-            self.dir = '.' + get_random_bytes(16).hex() # create a directory with a random name
-            os.makedirs(self.dir) # create a directory with the random name
-            if platform.system() == 'Windows':
-                os.system(f'attrib +h {self.dir}') # hide the directory
-            
-            with open(f'{self.dir}/keys.pem', 'wb') as f: # export keys as PEM file
-                f.write(self.keys.export_key('PEM'))
-        else:
-            self.dir = '.' + name
-            self.keys = self.load_keys_from_file()
-        
-        self.prv_key = self.keys # get the private key
-        self.pub_key = self.keys.publickey() # get the public key
+        # If pub_bytes is None, then we are creating / loading a complete identity (with private key)
+        if pub_bytes is None:
+            if name is None:
+                self.keys = RSA.generate(2048)  # generate a key pair
+                # create a directory with a random name
+                self.dir = '.' + get_random_bytes(16).hex()
+                os.makedirs(self.dir)  # create a directory with the random name
+                if platform.system() == 'Windows':
+                    os.system(f'attrib +h {self.dir}')  # hide the directory
 
+                with open(f'{self.dir}/keys.pem', 'wb') as f:  # export keys as PEM file
+                    f.write(self.keys.export_key('PEM'))
+            else:
+                self.dir = '.' + name
+                self.keys = self.load_keys_from_file()
+
+            self.prv_key = self.keys  # get the private key
+            self.pub_key = self.keys.publickey()  # get the public key
+        else:
+            self.pub_key = RSA.import_key(pub_bytes)
+            self.prv_key = None
     
+    def has_private(self) -> bool:
+        '''
+        Checks if the key is complete
+        :returns: bool
+        '''
+        return self.keys.has_private()
+
     def load_keys_from_file(self) -> RSA.RsaKey:
         '''
         Imports private and public keys to a file
@@ -38,7 +50,6 @@ class Identity:
             keys = RSA.import_key(f.read())
         return keys
 
-    
     def load_pub_key_from_bytes(self, keystr: bytes) -> None:
         '''
         Imports private and public keys from bytes
@@ -46,7 +57,6 @@ class Identity:
         :returns: None
         '''
         self.pub_key = RSA.import_key(keystr)
-    
 
     def export_private_key(self, UID: str) -> None:
         '''
@@ -57,7 +67,6 @@ class Identity:
         with open(f'{self.dir}/{UID}.pem', 'wb') as f:
             f.write(self.keys.exportKey('PEM'))
 
-    
     def export_public_key(self, UID: str) -> None:
         '''
         Exports public key to a file
@@ -66,7 +75,13 @@ class Identity:
         '''
         with open(f'{self.dir}/{UID}.pub', 'wb') as f:
             f.write(self.keys.publickey().exportKey('PEM'))
-
+    
+    def export_public_key_bytes(self) -> bytes:
+        '''
+        Returns the public key as bytes
+        :returns: bytes
+        '''
+        return self.get_public_key().export_key('PEM')
 
     def get_private_key(self) -> RSA.RsaKey:
         ''' 
@@ -75,14 +90,12 @@ class Identity:
         '''
         return self.keys
 
-
     def get_public_key(self) -> RSA.RsaKey:
         '''
         Returns the public key
         :returns: Rsakey object
         '''
         return self.keys.publickey()
-
 
     def get_keys(self) -> dict:
         '''
@@ -91,11 +104,10 @@ class Identity:
         '''
         private_key, public_key = self.get_private_key(), self.get_public_key()
         keys = {
-            "private_key": private_key, 
+            "private_key": private_key,
             "public_key": public_key
         }
         return dict(keys)
-
 
     def encrypt(self, msg: str) -> bytes:
         '''
@@ -105,7 +117,6 @@ class Identity:
         :legacy: to be removed
         '''
         return Cipher.encrypt(self.get_public_key(), msg)
-
 
     def decrypt(self, msg: bytes, enc_session_key: bytes, tag: bytes, nonce: bytes) -> str:
         '''
@@ -117,4 +128,7 @@ class Identity:
         :returns: returns the decrypted message (str)
         :legacy: to be removed
         '''
-        return Cipher.decrypt(self.get_private_key(), msg, enc_session_key, tag, nonce)
+        if self.has_private():
+            return Cipher.decrypt(self.get_private_key(), msg, enc_session_key, tag, nonce)
+        else:
+            raise Exception('Trying to decrypt with a public key')
