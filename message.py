@@ -31,6 +31,9 @@ class Packet:
     def __iter__(self):
         self._index = 0
         return self
+    
+    def __getitem__(self, index):
+        return self.data[index]
 
     def __next__(self):
         if self._index >= len(self):
@@ -40,3 +43,7 @@ class Packet:
         else:
             self._index += 1
             return self.data[self._index - 1]
+    
+    def append(self, item: PacketItem):
+        self.data.append(item)
+
