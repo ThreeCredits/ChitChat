@@ -1,3 +1,4 @@
+from ast import Bytes
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from cipher import Cipher
@@ -31,8 +32,7 @@ class Identity:
                 self.export_private_key()
 
         else:
-            self.pub_key = RSA.import_key(pub_bytes)
-            self.prv_key = None
+            self.keys = RSA.import_key(pub_bytes)
     
     def has_private(self) -> bool:
         '''
