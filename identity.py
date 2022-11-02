@@ -6,29 +6,30 @@ import os
 
 
 class Identity:
-    def __init__(self, name : str = None, pub_bytes : bytes = None) -> None:
+    def __init__(self, pub_bytes : bytes = None) -> None:
         '''
         Generate a public/private key pair using 2048 bits key length
         :returns: None
         '''
         # If pub_bytes is None, then we are creating / loading a complete identity (with private key)
         if pub_bytes is None:
-            if name is None:
-                self.keys = RSA.generate(2048)  # generate a key pair
-                # create a directory with a random name
-                self.dir = '.' + get_random_bytes(16).hex()
-                os.makedirs(self.dir)  # create a directory with the random name
-                if platform.system() == 'Windows':
-                    os.system(f'attrib +h {self.dir}')  # hide the directory
-
-                with open(f'{self.dir}/keys.pem', 'wb') as f:  # export keys as PEM file
-                    f.write(self.keys.export_key('PEM'))
-            else:
-                self.dir = '.' + name
+            # Check if a key already exists in .keys/self.pem
+            if os.path.isfile(f'.keys/self.pem'):
+                # Load
                 self.keys = self.load_keys_from_file()
+            else:
+                # Create
+                self.keys = RSA.generate(2048)
+                # Write to '.keys/self.pem'
+                # Check if the directory exists
+                if not os.path.isdir('.keys'):
+                    os.mkdir('.keys')
+                    # Hide the directory on Windows
+                    if platform.system() == 'Windows':
+                        os.system('attrib +H .keys')
+                # Write the key
+                self.export_private_key()
 
-            self.prv_key = self.keys  # get the private key
-            self.pub_key = self.keys.publickey()  # get the public key
         else:
             self.pub_key = RSA.import_key(pub_bytes)
             self.prv_key = None
@@ -40,13 +41,13 @@ class Identity:
         '''
         return self.keys.has_private()
 
-    def load_keys_from_file(self) -> RSA.RsaKey:
+    def load_keys_from_file(self, UID : str = "self") -> RSA.RsaKey:
         '''
         Imports private and public keys to a file
         :param file_name: The name of the file
         :returns: RSA.RsaKey
         '''
-        with open(f'{self.dir}/keys.pem', 'r') as f:
+        with open(f'.keys/{UID}.pem', 'r') as f:
             keys = RSA.import_key(f.read())
         return keys
 
@@ -58,22 +59,22 @@ class Identity:
         '''
         self.pub_key = RSA.import_key(keystr)
 
-    def export_private_key(self, UID: str) -> None:
+    def export_private_key(self, UID: str = "self") -> None:
         '''
         Exports private key to a file
         :param UID: User's unique ID
         :returns: None
         '''
-        with open(f'{self.dir}/{UID}.pem', 'wb') as f:
+        with open(f'.keys/{UID}.pem', 'wb') as f:
             f.write(self.keys.exportKey('PEM'))
 
-    def export_public_key(self, UID: str) -> None:
+    def export_public_key(self, UID: str = "self") -> None:
         '''
         Exports public key to a file
         :param UID: User's unique ID
         :returns: None
         '''
-        with open(f'{self.dir}/{UID}.pub', 'wb') as f:
+        with open(f'.keys/{UID}.pub', 'wb') as f:
             f.write(self.keys.publickey().exportKey('PEM'))
     
     def export_public_key_bytes(self) -> bytes:
