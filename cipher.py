@@ -4,20 +4,21 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 import base64
-import pickle
+import json
 
 
 def send_ciphered_message(message, client, identity):
-    message = pickle.dumps(message)
+    message = json.dumps(message)
     message = identity.encrypt(message)
-    message = pickle.dumps(message)
+    message = json.dumps(message)
     client.send(message)
 
 def receive_ciphered_message(message, client, identity):
     message = client.recv(32 * 1024)
-    message = pickle.loads(message)
+    message = json.loads(message)
     message = identity.decrypt(*message)
-    message = pickle.loads(message)
+    message = json.loads(message)
+
     return message
 
 
