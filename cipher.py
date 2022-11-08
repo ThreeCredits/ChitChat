@@ -8,13 +8,13 @@ import pickle
 
 
 def send_ciphered_message(message, client, identity):
-    message = pickle.dumps(message)
+    message = pickle.dumps(message, protocol=5)
     message = identity.encrypt(message)
-    message = pickle.dumps(message)
+    message = pickle.dumps(message, protocol=5)
     client.send(message)
 
-def receive_ciphered_message(message, client, identity):
-    message = client.recv(32 * 1024)
+def receive_ciphered_message(client, identity):
+    message = client.recv(1024 * 1024)
     message = pickle.loads(message)
     message = identity.decrypt(*message)
     message = pickle.loads(message)
