@@ -32,6 +32,9 @@ class Response():
         """
         self.job_tag = job_tag
         self.result = result
+    
+    def __getitem__(self, index):
+        return self.result[index]
 
 
 class TaggedQueue():
@@ -81,7 +84,7 @@ class TaggedQueue():
         # We store the response
         self.responses[job_tag] = response
 
-    def wait_for_result(self, tag, timeout: int = QUEUE_RESPONSE_TIMEOUT) -> Response:
+    def wait_for_result(self, tag, timeout: int = QUEUE_RESPONSE_TIMEOUT, pop_response : bool = True) -> Response:
         """
         Waits for a result with the given tag
         """
@@ -94,9 +97,16 @@ class TaggedQueue():
                 return None
             # We check if the result is in the queue
             if tag in self.responses:
-                return self.responses[tag]
+                # We get the response
+                response = self.responses[tag]
+                # We check if we have to pop the response
+                if pop_response:
+                    # We pop the response
+                    del self.responses[tag]
+                # We return the response
+                return response
             # We wait a bit
-            time.sleep(QUEUE_CHECK_DELAY)
+            time.sleep(0)
 
     def next(self):
         """
