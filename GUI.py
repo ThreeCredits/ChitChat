@@ -286,7 +286,7 @@ class ChatPreview(tk.Frame):
         
         self.gui.current_chat = self.chat
         self.gui.app_title.config(text = "ChitChat - " + self.chat.chat_name)
-        self.gui.load_messages()
+        self.gui.load_message_frames()
 
 
 
@@ -688,7 +688,7 @@ def in_handler(gui: NoFrame):
             elif item.type == "chat_create_success":#TODO costanti
                     print("users:", item.data[3])
                     gui.chats[item.data[0]] = (Chat(item.data[0], item.data[1], item.data[2], users = item.data[3]))
-                    gui.load_chats()
+                    gui.load_chat_previews()
 
             elif item.type == "msg":#TODO costanti TODO ordinare per data
                     print("received message", item.data)
@@ -697,6 +697,11 @@ def in_handler(gui: NoFrame):
                     if gui.current_chat:
                         if item.data[0] == gui.current_chat.id:
                             MessageFrame(gui, msg)
+                            # Fix scroll region and scroll to the bottom
+                            for i in range(2): 
+                                gui.messages_canvas.frame.update_idletasks()
+                                gui.messages_canvas.on_canvas_configure(None)
+                                gui.messages_canvas.canvas.yview("moveto", "1.0")
 
 
 
@@ -719,8 +724,8 @@ class LoggedGUI(NoFrame):
         self.init_widgets()
         Thread(target = in_handler, args = (self,), daemon = True).start()
         Thread(target = out_handler, daemon = True).start()
-        self.load_chats()
-        self.load_messages()
+        self.load_chat_previews()
+        self.load_message_frames()
 
 
         #self.bind("<Configure>", self.on_resize)
@@ -821,11 +826,12 @@ class LoggedGUI(NoFrame):
         out_packet.append(PacketItem("create_chat", (self.newchat_name.get(), self.newchat_description.get(1.0, tk.END), [(self.new_chat_user.get(), self.new_chat_tag.get())])  ))
     
 
-    def send_message(self) -> None:
+    def send_message(self, event: tk.Event = None) -> None:
         global out_packet
         #TODO costanti TODO attenzione se current_chat è null
         print("sending message to chat", self.current_chat.id, '"', self.entry.get(), '"')
         out_packet.append(PacketItem("msg_send", (self.current_chat.id, self.entry.get())))
+        self.entry.delete(0, tk.END)
 
 
     def logout(self) -> None:
@@ -838,8 +844,17 @@ class LoggedGUI(NoFrame):
         self.quit()
         ConnectGUI()
 
+    def load_messages(self):
+        with open("chats.txt", "r") as file:
+            pass
+    
 
-    def load_chats(self) -> None:
+    def save_messages(self):
+        with open("chats.txt", "a+") as file:
+            pass
+
+
+    def load_chat_previews(self) -> None:
         """
         Creates a chat preview in the side panel for every chat
         """
@@ -851,7 +866,7 @@ class LoggedGUI(NoFrame):
             tk.Frame(self.chats_canvas.frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
 
 
-    def load_messages(self) -> None:
+    def load_message_frames(self) -> None:
         """
         Loads the messages of the current chat
         """
@@ -903,7 +918,7 @@ class LoggedGUI(NoFrame):
 
         # Create main container
         main_container = tk.Frame(self)
-        main_container.grid_columnconfigure(0, weight=1)
+        main_container.grid_columnconfigure(0, weight=2)
         main_container.grid_columnconfigure(1, weight=3)
         main_container.grid_rowconfigure(0, weight = 1)
         main_container.pack(expand=True, fill = tk.BOTH)
@@ -1042,6 +1057,7 @@ class LoggedGUI(NoFrame):
         entry_send.grid(row = 4, column = 0, sticky = "news")
 
         self.entry = tk.Entry(entry_send, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.entry.bind("<Return>", self.send_message)
         self.entry.grid(row = 0, column = 0, sticky = "news", padx = 15, pady = 5)
         tk.Button(entry_send, image = self.images["send"], border = 0, background = "#F0F0F0", command = self.send_message).grid(row = 0, column = 1, sticky = "news")
         s = Sizegrip(entry_send, style = "TSizegrip")

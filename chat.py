@@ -11,8 +11,12 @@ class ChatMessage:
     def __init__(self, number:int, author: Tuple[str, int, int], date: datetime.datetime, content: Any) -> None:
         self.number = number
         self.author = author
-        self.content = content
         self.date = date
+        self.content = content
+        
+    
+    def __str__(self):
+        return str(self.number) + "," + self.author[0] + "," + str(self.author[1]) + "," + str(self.date) + "," + self.content
     
 
 class Chat:
@@ -22,6 +26,15 @@ class Chat:
         self.description = description
         self.users = users
         self.messages = []
+
+    
+    def __str__(self):
+        res = str(self.id) + "," + self.chat_name + "," + self.description + "|"
+        for u in self.users:
+            res += u[0] + "," + str(u[1]) + ";"
+        res += "|"
+        for m in self.messages:
+            res += str(m)
 
         
     def append_messages(self, *args: ChatMessage):
