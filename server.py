@@ -19,6 +19,7 @@ import mysql.connector          # For the database connection
 from typing import *            # For the type hints
 from TaggedQueue import *       # For the TaggedQueue class (see TaggedQueue.py)
 from User import *              # For the User class (see User.py)
+from serverPorts import *       # For the server ports (see serverPorts.py)
 
 ### CONSTANTS ###
 # Note: for now the constants are arbitrary, but they will be changed later
@@ -59,44 +60,8 @@ class DBMS():
         """
         # We store the configuration
         self.config = config
-        # We store the connection to the database
-        self.connection = None
-        # We store the cursor
-        self.cursor = None
-        # We store the number of attempts to connect to the database
-        self.attempts = 0
-        # We try to connect to the database
-        self.connect()
 
-    def connect(self):
-        """
-        Connects to the database
-        """
-        # We try to connect to the database
-        try:
-            self.connection = mysql.connector.connect(
-                host=self.config["host"],
-                user=self.config["user"],
-                password=self.config["password"],
-                database=self.config["database"]
-            )
-            # We store the cursor
-            self.cursor = self.connection.cursor()
-        except mysql.connector.Error as err:
-            # If we have too many attempts, we exit
-            if self.attempts > MAX_DB_CONNECTION_ATTEMPTS:
-                print("Too many attempts to connect to the database. Exiting...")
-                sys.exit(1)
-            # Else, we print the error and we wait a bit
-            print("Failed to connect to the database. Error: {}".format(err))
-            print("Trying again in {} seconds...".format(DB_CONNECTION_DELAY))
-            time.sleep(DB_CONNECTION_DELAY)
-            # We increment the number of attempts
-            self.attempts += 1
-            # We try again
-            self.connect()
-
-    def query(self, results_queue: TaggedQueue, job_tag: int, query: str, args: TypedDict = None ):
+    def query(self, results_queue: TaggedQueue, job_tag: int, query: str, args: TypedDict = None, procedure: bool = False, fetch: bool = True):
         """
         Executes a query on the database
         The query method is designed to be used by multiple threads, so it is thread-safe
@@ -104,29 +69,73 @@ class DBMS():
         TODO: notify watchdow of how many queries are running (avoid overloading the database)
         TODO: keep count of number of reconnections (detect bad connection)
         """
+        # We try to connect to the database
+        attempts = 0
+        while attempts < MAX_DB_CONNECTION_ATTEMPTS:
+            try:
+                connection = mysql.connector.connect(
+                    host=self.config["host"],
+                    user=self.config["user"],
+                    password=self.config["password"],
+                    database=self.config["database"]
+                )
+                # We store the cursor
+                cursor = connection.cursor()
+                break
+            except mysql.connector.Error as err:
+                # If we have too many attempts, we exit
+                if attempts > MAX_DB_CONNECTION_ATTEMPTS:
+                    print("Too many attempts to connect to the database. Exiting...")
+                    sys.exit(1)
+                # Else, we print the error and we wait a bit
+                print("Failed to connect to the database. Error: {}".format(err))
+                print("Trying again in {} seconds...".format(DB_CONNECTION_DELAY))
+                time.sleep(DB_CONNECTION_DELAY)
+                # We increment the number of attempts
+                attempts += 1
+                # We try again
+                continue
+        if attempts >= MAX_DB_CONNECTION_ATTEMPTS:
+            raise Exception("DB not responding: Too many attempts to connect to the database")
         # We execute the query
-        self.cursor.execute(query, args)
-        # We get the results
-        results = self.cursor.fetchall()
+
+        if procedure:
+            # We execute the procedure
+            cursor.callproc(query, args)
+            if not fetch:
+                # We commit the changes
+                connection.commit()
+                # And we close the connection
+                connection.close()
+                return
+            # Get the results
+            results = cursor.stored_results()
+            # Store the results in a list with all the results of every stored procedure, not divided by procedure
+            results_list = []
+            for result in results:
+                for row in result.fetchall():
+                    results_list.append(row)
+            results = results_list
+        else:
+            # We execute the query
+            cursor.execute(query, args)
+            if not fetch:
+                # We commit the changes
+                connection.commit()
+                # And we close the connection
+                connection.close()
+                return
+            # We get the results
+            results = cursor.fetchall()
+        
         # We commit the changes
-        self.connection.commit()
+        connection.commit()
+        # And we close the connection
+        connection.close()
         # Wrap them into the DBMSResult class
         results = DBMSResult(job_tag, query, args, results)
         # We put the results in the queue
         results_queue.put_response(job_tag, results)
-    
-    def close(self):
-        """
-        Closes the connection to the database
-        """
-        self.connection.close()
-
-    def __del__(self):
-        """
-        The destructor of the DBMS class
-        """
-        # We close the connection to the database
-        self.close()
     
 class DBMSResult(Response):
     """
@@ -152,36 +161,6 @@ class DBMSResult(Response):
         The string representation of the DBMSResult class
         """
         return "DBMS Result: Job#{} - Query: {} {}".format(self.job_tag, self.query, self.args)
-
-class KeyMaster():
-    """
-    The key master class is used to mediate the access to public keys.
-    """
-    def __init__(self, server_identity: Identity, dbms: DBMS):
-        """
-        The constructor of the KeyMaster class
-        """
-        self.server_identity = server_identity
-        self.dbms = dbms
-        # In order to avoid querying the database too much, we store the keys in a dictionary
-        self.keys = {} 
-        # In order to not overload the normal query queue, we use a separate queue for the key queries
-        self.key_query_queue = TaggedQueue()
-    
-    def get_key(self, user: User, results_queue: Any, job_tag: int):
-        """
-        Gets the public key of an identity
-        """
-        # If we already have the key, we return it
-        if user in self.keys:
-            return self.keys[user]
-        # Else, we query the database (TODO: query from the database development branch)
-        
-        # self.dbms.query(results_queue, job_tag, GET_KEY_QUERY, user.get_name(), user.get_tag(), user.get_password())
-        key = results_queue.wait_for_result(job_tag)
-        # We store the key
-        self.keys[user] = key
-        return key
 
 class Server():
 
@@ -212,8 +191,8 @@ class Server():
         worker_threads_count = 10,
 
         verbose = 3,
-        ansi = True,
-        key_name = None):
+        ansi = True
+        ):
 
         # Init the attributes
         self.host = host
@@ -229,7 +208,7 @@ class Server():
         self.worker_threads_count = worker_threads_count
         self.verbose = verbose
         self.ansi = ansi
-        self.key_name = key_name
+        self.blacklisted = {} # IP : end_of_blacklist_time
 
         # Running threads and signal flags
         self.watchdog_thread = None
@@ -266,26 +245,22 @@ class Server():
 
         # Create the server 
         self.printv("Creating identity...", level = 2)
-        if self.key_name:
-            self.identity = Identity(name = self.key_name)
-            # Warn the user that using already existing keys is not recommended
-            self.printv("Using existing identity. This is not recommended.", level = 2)
-        else:
-            self.identity = Identity()
-            self.printv("Created identity.", level = 2)
-        
+        self.identity = Identity()
+            
         # Store the public key for ease of access
-        self.public_key = self.identity.get_public_key()
+        self.public_key = self.identity.export_public_key_bytes()
 
         # Print the public key
         self.printv("Public key: {}".format(self.public_key), level = 3)
 
-        # Initialize the KeyMaster
-        self.printv("Initializing KeyMaster...", level = 2)
-        self.keymaster = KeyMaster(
-            self.identity,
-            self.dbms
+        # Init the login manager
+        self.printv("Initializing LoginManager...", level = 2)
+        self.login_manager = LoginManager(
+            5556,
+            550,
+            self
         )
+
         self.printv("Initialized KeyMaster", level = 2)
 
         # Initialize worker threads pool
@@ -317,6 +292,10 @@ class Server():
         # Start the watchdog
         self.watchdog_thread.start()
 
+        # Start the login manager
+        self.printv("Starting LoginManager...", level = 2)
+        self.login_manager.run()
+
         # TODO: rest
         # ...
     
@@ -342,7 +321,8 @@ class Server():
             case 2:
                 self.printv("[Watchdog] Free error code. Shouldn't trigger before assigning it.", level = 0)
             case 1:
-                self.printv("[Watchdog] Received kill message. Exiting watchdog...", level = 2)
+                self.printv("[Watchdog] Received kill message. Exiting...", level = 2)
+                self.shutdown() 
 
         # Restore free slot for any future watchdog execution
         self.watchdog_signal = -1
@@ -359,6 +339,7 @@ class Server():
             # To not overload the CPU
             job = self.queue.next()
             if job:
+                # TODO: instead of match-case, we call the function _"job_type" with job as argument
                 match job.type:
                     case "get":
                         # Get the data from the database
@@ -366,6 +347,25 @@ class Server():
                     case "register":
                         # Ask to register a new user
                         self._register(job)
+                    case "get_userid_info":
+                        # Get the info of a user
+                        self._get_userid_info(job)
+                    case "login":
+                        # Login a user
+                        self._login(job)
+                    case "set_last_seen":
+                        # Set the last seen time of a user
+                        self._set_last_seen(job)
+                    case "create_chat":
+                        # Create a new chat
+                        self._create_chat(job)
+                    case "send_message":
+                        # Send a message to a chat
+                        self._send_message(job)
+                    case "get_unread_messages":
+                        # Get the unread messages of a chat
+                        self._get_unread_messages(job)
+
                 pass
             time.sleep(WORKER_THREAD_QUEUE_CHECK_DELAY)
         # Restore free slot for any future worker thread allocated
@@ -378,36 +378,37 @@ class Server():
         job = Job(
             type = "login",
             args = {
-                "username": username,
+                "user_nick": username,
                 "user_tag": user_tag,
-                "password": password
+                "user_password": password
             }
         )
         job_tag = self.queue.put_request(job)
         return job_tag
     
-    def _login(self, job):
+    def _login(self, job : Job):
         """
         The _login method is the actual code executed by workers to resolve a login request.
         It will be called by the _worker_thread function.
         """
-        query = None
-        # query = LOGIN_QUERY # TODO: query from dbms developement branch
+        query = "Check_Log_In"
         response = self.dbms.query(self.queue, job.job_tag, query, (
-            job.args["username"],
             job.args["user_tag"],
-            job.args["password"]
-        ))
-        return job.tag
+            job.args["user_nick"],
+            job.args["user_password"]
+        ), procedure=True)
+        return job.job_tag
     
-    def register(self, username, password):
+    def register(self, username, password, key):
         # This function will create a new job for the queue, and return the job_tag
         # The job will be resolved by the worker threads, which will then put the response in the queue
         job = Job(
             type = "register",
             args = {
                 "username": username,
-                "password": password
+                "password": password,
+                "state" : 0, # TODO: use constants in other branch
+                "key" : key
             }
         )
         job_tag = self.queue.put_request(job)
@@ -418,14 +419,230 @@ class Server():
         The _register method is the regiasteactual code executed by workers to resolve a register request.
         It will be called by the _worker_thread function.
         """
-        query = "Select createuser (%(username)s, %(password)s)" # TODO: to be replaced by query from dbms developement branch
+        query = "Select create_user (%(username)s, %(state)s, %(key)s, %(password)s)" # TODO: to be replaced by query from dbms developement branch
         response = self.dbms.query(self.queue, job.job_tag, query, 
             {
              "username" : job.args["username"],
-             "password" : job.args["password"]
+             "password" : job.args["password"],
+             "state" : job.args["state"],
+             "key" : job.args["key"]
             }
         )
 
+        return job.job_tag
+    
+    def set_last_seen(self, user_id):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "set_last_seen",
+            args = {
+                "user_id": str(user_id)
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _set_last_seen(self, job):
+        """
+        The _set_last_seen method is the actual code executed by workers to resolve a set_last_seen request.
+        It will be called by the _worker_thread function.
+        """
+        query = "Update User Set last_log_in = now() Where id = %(user_id)s"
+        response = self.dbms.query(self.queue, job.job_tag, query, {
+            "user_id" : job.args["user_id"]
+        }, fetch=False)
+        return job.job_tag
+    
+    def get_chat_info(self, user, chat):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "get_chat_info",
+            args = {
+                "user": user,
+                "chat": chat
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _get_chat_info(self, job):
+        """
+        The _get_chat_info method will query the db, making sure that the user is actually in the chat.
+        It will be called by the _worker_thread function.
+        """
+        # query = "Select * from chat where chatid = %(chatid)s and userid = %(userid)s"
+        pass
+    
+    def get_userid_info(self, user):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "get_userid_info",
+            args = {
+                "user": str(user)
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _get_userid_info(self, job):
+        """
+        The _get_userid_info method will query the db, making sure that the user exists.
+        It will be called by the _worker_thread function.
+        """
+        query = "Select IDN from user where ID = %(userid)s"
+        response = self.dbms.query(self.queue, job.job_tag, query, {
+            "userid": job.args["user"]
+        })
+        return job.job_tag
+    
+    def create_chat(self, creator, name, description, partecipants):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "create_chat",
+            args = {
+                "creator": creator,
+                "name": name,
+                "description": description,
+                "partecipants": partecipants,
+                "photo" : "photos/default.png"
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _create_chat(self, job):
+        """
+        The _create_chat method will query the db, creating a new chat.
+        It will be called by the _worker_thread function.
+        """
+        query = "SELECT create_chat(%(chat_name)s, %(chat_description)s, %(chat_creator)s, %(chat_photo)s)"
+        response = self.dbms.query(self.queue, str(job.job_tag)+"-1", query, {
+            "chat_creator": job.args["creator"].ID,
+            "chat_name": job.args["name"],
+            "chat_description": job.args["description"],
+            "chat_photo": job.args["photo"]
+        })
+        # Wait for the chat to be created   
+        creation = self.queue.wait_for_result(str(job.job_tag)+"-1")
+        chat_id = creation[0][0]
+        # Add creator as partecipant
+        query = "Insert_participant"
+        response = self.dbms.query(self.queue, str(job.job_tag)+"-2", query, (
+            job.args["creator"].tag,
+            job.args["creator"].username,
+            chat_id
+        ), procedure=True)
+        # Wait for the partecipant to be added
+        self.queue.wait_for_result(str(job.job_tag)+"-2")
+        # Add the partecipants
+        for partecipant in job.args["partecipants"]:
+            query = "Insert_participant"
+            response = self.dbms.query(self.queue, str(job.job_tag)+"-3", query, (
+                partecipant[1],
+                partecipant[0],
+                chat_id
+            ), procedure=True)
+            # Wait for the partecipant to be added
+            self.queue.wait_for_result(str(job.job_tag)+"-3")
+        # Get the chat partecipants
+        query = "GET_CHAT_PARTICIPANTS"
+        response = self.dbms.query(self.queue, str(job.job_tag)+"-4", query, (
+            chat_id,
+        ), procedure=True)
+        # Wait for the partecipants to be retrieved
+        partecipants = self.queue.wait_for_result(str(job.job_tag)+"-4")
+        # Create the response
+        response = Response(
+            job_tag = job.job_tag,
+            result = {
+                "chat_id" : chat_id,
+                "chat_name" : job.args["name"],
+                "chat_description" : job.args["description"],
+                "partecipants" : partecipants.result
+            }
+        )
+        # Put the response in the queue
+        self.queue.put_response(job.job_tag, response)
+        return job.job_tag
+
+    def send_message(self, user_id, chat_id, message):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "send_message",
+            args = {
+                "user_id": user_id,
+                "chat_id": chat_id,
+                "message": message
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _send_message(self, job):
+        """
+        The _send_message method will query the db, creating a new message.
+        It will be called by the _worker_thread function.
+        """
+        query = "Select create_message(%(sender_id)s, %(chat_id)s, %(message)s)"
+        response = self.dbms.query(self.queue, job.job_tag, query, {
+            "sender_id": job.args["user_id"],
+            "chat_id": job.args["chat_id"],
+            "message": job.args["message"]
+        })
+        return job.job_tag
+    
+    def get_unread_messages(self, user_id):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "get_unread_messages",
+            args = {
+                "user_id": user_id
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _get_unread_messages(self, job):
+        """
+        The _get_unread_messages method will query the db, retrieving the unread messages.
+        It will be called by the _worker_thread function.
+        """
+        query = "messages_not_received"
+        response = self.dbms.query(self.queue, str(job.job_tag) + "-1", query, (
+            job.args["user_id"],
+        ), procedure=True)
+        result = self.queue.wait_for_result(str(job.job_tag) + "-1")
+  
+        # Find the highest relative message id for each chat (second element in the tuple)
+        highest_ids = {}
+        for message in result.result:
+            if message[0] in highest_ids:
+                if message[1] > highest_ids[message[0]]:
+                    highest_ids[message[0]] = message[1]
+            else:
+                highest_ids[message[0]] = message[1]
+        # Update the last message id for each chat
+        for chat_id in highest_ids:
+            query = "update_last_message"
+            response = self.dbms.query(self.queue, str(job.job_tag) + "-2", query, (
+                job.args["user_id"],
+                chat_id,
+                highest_ids[chat_id]
+            ), procedure=True)
+            self.queue.wait_for_result(str(job.job_tag) + "-2")
+        # Create the response
+        response = Response(
+            job_tag = job.job_tag,
+            result = result.result
+        )
+        # Put the response in the queue
+        self.queue.put_response(job.job_tag, response)
         return job.job_tag
 
     def shutdown(self):
@@ -435,8 +652,6 @@ class Server():
         # Kill the worker threads
         for i in range(len(self.worker_signals)):
             self.worker_signals[i] = 1
-        # Kill the DBMS connection
-        self.dbms.close()
         # Exit
         sys.exit(0)
         return
