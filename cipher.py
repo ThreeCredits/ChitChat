@@ -13,7 +13,7 @@ def send_ciphered_message(message, client, identity):
     message = pickle.dumps(message)
     client.send(message)
 
-def receive_ciphered_message(message, client, identity):
+def receive_ciphered_message(client, identity):
     message = client.recv(32 * 1024)
     message = pickle.loads(message)
     message = identity.decrypt(*message)
