@@ -45,6 +45,18 @@ FROM user u, chat c
 WHERE c.ID = Chat_id AND u.ID = c.Founder_id;
 END$$
 
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Delete_chat`(IN `Chat_id` INT(11))
+BEGIN
+DELETE FROM chat
+WHERE chat.ID = Chat_id;
+
+DELETE FROM message
+WHERE message.Id_chat = Chat_id;
+
+DELETE FROM participate
+WHERE participate.Id_chat = Chat_id;
+END$$
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `Get_chat_participants`(IN `Chat_id` INT(11))
 BEGIN
 
