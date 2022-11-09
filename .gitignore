@@ -133,7 +133,6 @@ tests/
 generate_icons.py
 note.txt
 e2ee.py
-
-
+.keys/
 chats.txt
 
