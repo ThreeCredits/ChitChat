@@ -8,9 +8,9 @@ from constants import *
 from PIL import ImageTk, Image
 import mouse
 from typing import Tuple, Any, List
-from network import Network
 
-import socket, pickle, threading
+
+import socket, pickle
 from identity import Identity
 from message import *
 from utils import *
@@ -20,7 +20,7 @@ from threading import Thread
 s: socket.socket = None
 self_identity: Identity = Identity()
 server_identity: Identity = None
-out_packet: Packet = None
+out_packet: Packet = Packet([])
 
 
 
@@ -45,7 +45,7 @@ class NoFrame(tk.Toplevel):
         
         # Creating the main window
         tk.Toplevel.__init__(self, master = self.hidden_root, bg = bg)
-        self.transient(self.hidden_root)
+        #self.transient(self.hidden_root)
         self.geometry(str(size[0]) + "x" + str(size[1])) 
         
         # removing frame
@@ -60,7 +60,9 @@ class NoFrame(tk.Toplevel):
         self.start_y = None
         self.old_size = size
 
-        #self.on_focus(None)
+        self.on_focus(None)
+        self.protocol("WM_DELETE_WINDOW", self.quit)
+        self.hidden_root.protocol("WM_DELETE_WINDOW", self.quit)
 
 
     def minimize(self) -> None:
@@ -68,12 +70,13 @@ class NoFrame(tk.Toplevel):
         minimized the window.
         """
         self.hidden_root.iconify()
-
+        self.withdraw()
 
     def quit(self) -> None:
         """
         closes the window.
         """
+        #print("closing")
         self.destroy()
         self.hidden_root.destroy()
 
@@ -83,6 +86,7 @@ class NoFrame(tk.Toplevel):
         lifts the window.
         """
         self.lift()
+        self.deiconify()
 
  
 
@@ -283,6 +287,7 @@ class ChatPreview(tk.Frame):
         for w in self.widgets:
             w.configure(bg = APP_MAIN_COLOR)
         
+        self.gui.entry.config(state = "normal")
         self.gui.current_chat = self.chat
         self.gui.app_title.config(text = "ChitChat - " + self.chat.chat_name)
         self.gui.load_message_frames()
@@ -658,8 +663,7 @@ def out_handler() -> None:
     """
     global s, server_identity, self_identity, out_packet
 
-    print("out handler thread started.")
-    out_packet = Packet([])
+    #print("out handler thread started.")
     while True:
         out_packet.append(PacketItem("ping", data = datetime.datetime.now()))
         out_packet.append(PacketItem("msg_get", data = None)) # get unread messages
@@ -678,22 +682,28 @@ def in_handler(gui: NoFrame) -> None:
     """
     TODO
     """
+    global out_packet
     while True:
         msg = receive_ciphered_message(s, self_identity)
+        reload_chat_previews = False
         for item in msg:
             if item.type == "pong": #TODO fare il match e aggiornare python TODO COSTANTI
                 #case "pong":
                     gui.ping = round((datetime.datetime.now() - item.data).total_seconds() * 1000)
                     gui.status_label.config(text = STATUS_STRING[gui.status] + " - " + str(gui.ping) + "ms")
             
-            elif item.type == "chat_create_success":#TODO costanti
-                    print("users:", item.data[3])
-                    gui.chats[item.data[0]] = (Chat(item.data[0], item.data[1], item.data[2], users = item.data[3]))
-                    gui.load_chat_previews()
+            
+            #elif item.type == "chat_create_success":#TODO costanti
+            #        print("users:", item.data[3])
+            #        gui.chats[item.data[0]] = (Chat(item.data[0], item.data[1], item.data[2], users = item.data[3]))
+            #        gui.load_chat_previews()
 
             elif item.type == "msg":#TODO costanti TODO ordinare per data
-                    print("received message", item.data)
+                    #print("received message", item.data)
                     msg = ChatMessage(number = item.data[1], author = (item.data[2], item.data[3]), date = item.data[4], content = item.data[5].decode("utf-8"))
+                    if item.data[0] not in gui.chats:
+                        gui.chats[item.data[0]] = Chat(item.data[0], "Loading...", "Loading...", datetime.datetime.now())
+                        reload_chat_previews = True
                     gui.chats[item.data[0]].append_message(msg)
                     if gui.current_chat:
                         if item.data[0] == gui.current_chat.id:
@@ -703,6 +713,39 @@ def in_handler(gui: NoFrame) -> None:
                                 gui.messages_canvas.frame.update_idletasks()
                                 gui.messages_canvas.on_canvas_configure(None)
                                 gui.messages_canvas.canvas.yview("moveto", "1.0")
+            
+            elif item.type == "update_chats":#TODO costanti
+                    missing_chats_ids = []
+                    for chat_id in item.data:
+                        if chat_id not in gui.chats:
+                            missing_chats_ids.append(chat_id)
+                    #print("missing chats:", missing_chats_ids)
+
+                    out_packet.append(PacketItem("get_chats", missing_chats_ids))
+
+                    deleted_chats_ids = []
+                    for chat_id in gui.chats:
+                        if chat_id not in item.data:
+                            deleted_chats_ids.append(chat_id)
+                    #print("chats where you are not in anymore:", deleted_chats_ids)
+
+                    for chat_id in deleted_chats_ids:
+                        gui.chats.pop(chat_id)
+                    gui.load_chat_previews()
+            
+            elif item.type == "get_chat": #TODO costanti
+                    #print("users:", item.data[4])
+                    if item.data[0] in gui.chats:
+                        gui.chats[item.data[0]].update(chat_name = item.data[1], description = item.data[2], users = item.data[4])
+                    else:
+                        gui.chats[item.data[0]] = (Chat(item.data[0], item.data[1], item.data[2], item.data[3], users = item.data[4]))
+                    reload_chat_previews = True
+        
+        if reload_chat_previews:
+            gui.load_chat_previews()
+                    
+                    
+
 
 
 
@@ -717,11 +760,13 @@ class LoggedGUI(NoFrame):
         self.status = STATUS_ONLINE
         self.ping = 0
         
-        self.chats = {17: Chat(17, "a", "b", [("bruno", 2, None), ("si spera",1, None)])}
+        self.chats = None
         self.current_chat = None
+        self.load_chats()
 
         self.images = {}
         self.load_images()
+        
 
         self.init_widgets()
         Thread(target = in_handler, args = (self,), daemon = True).start()
@@ -735,24 +780,17 @@ class LoggedGUI(NoFrame):
         self.resizing = False
         self.mainloop()
     
-    def start_resize(self, event: tk.Event) -> None:
-        self.messages_yview = self.messages_canvas.canvas.yview()
-        print("start yview", self.messages_yview)
 
 
-    def do_resize(self, event: tk.Event) -> None:
-        self.messages_canvas.frame.update_idletasks()
-        self.messages_canvas.on_canvas_configure(None)
-        self.messages_canvas.canvas.yview("moveto", str(self.messages_yview[1]))
-        #self.update()
+    def on_resize(self, event: tk.Event) -> None:
+        return
+        self.update()
 
 
-    def stop_resize(self, event: tk.Event):
-        print("resetting yview:", self.messages_yview[1])
-        self.messages_canvas.frame.update_idletasks()
-        self.messages_canvas.on_canvas_configure(None)
-        self.messages_canvas.canvas.yview("moveto", str(self.messages_yview[1]))
-        print("yview is now:", self.messages_canvas.canvas.yview())
+    def quit(self):
+        print("saving chats")
+        self.save_chats()
+        NoFrame.quit(self)
 
 
     def toggle_fullscreen(self, position_reset: bool = True) -> None:
@@ -824,22 +862,25 @@ class LoggedGUI(NoFrame):
         global out_packet
 
         #TODO costanti
-        print("sending request to create new chat")
+        #print("sending request to create new chat")
         out_packet.append(PacketItem("create_chat", (self.newchat_name.get(), self.newchat_description.get(1.0, tk.END), [(self.new_chat_user.get(), self.new_chat_tag.get())])  ))
     
 
     def send_message(self, event: tk.Event = None) -> None:
         global out_packet
         #TODO costanti TODO attenzione se current_chat è null
-        print("sending message to chat", self.current_chat.id, '"', self.entry.get(), '"')
-        out_packet.append(PacketItem("msg_send", (self.current_chat.id, self.entry.get())))
+        msg = self.entry.get()
+        msg = msg.lstrip()
+        if len(msg) == 0: return
+        #print("sending message to chat", self.current_chat.id, '"', msg, '"')
+        out_packet.append(PacketItem("msg_send", (self.current_chat.id, msg)))
         self.entry.delete(0, tk.END)
     
 
     def set_status(self, status: int):
         self.status = status
         self.status_label.config(text = STATUS_STRING[self.status] + " - " + str(self.ping) +"ms")
-        print("sending request to set status to", STATUS_STRING[self.status])
+        #print("sending request to set status to", STATUS_STRING[self.status])
         out_packet.append(PacketItem("set_status", status))
 
 
@@ -849,30 +890,50 @@ class LoggedGUI(NoFrame):
                 PacketItem("logout", None)
             ]
         )
-        send_ciphered_message(p, s, server_identity)
+        try:
+            send_ciphered_message(p, s, server_identity)
+        except: pass
+
         self.quit()
         ConnectGUI()
 
-    def load_messages(self):
-        with open("chats.txt", "r") as file:
-            pass
+
+    def load_chats(self):
+        global out_packet
+        if not os.path.exists("chats.txt"):
+            with open("chats.txt", "wb") as file:
+                pickle.dump({}, file)
+            self.chats = {}
+        else:
+            with open("chats.txt", "rb") as file:
+                self.chats = pickle.load(file)
+        
+        out_packet.append(PacketItem("update_chats", None))
+        #TODO quando arriva un messaggio per una chat che non ho crea la chat il locale
+
     
 
-    def save_messages(self):
-        with open("chats.txt", "a+") as file:
-            pass
+    def save_chats(self):
+        with open("chats.txt", "wb") as file:
+            pickle.dump(self.chats, file)
 
 
     def load_chat_previews(self) -> None:
         """
         Creates a chat preview in the side panel for every chat
         """
+        self.chats_canvas.canvas.yview("moveto", "0.0")
         for w in self.chats_canvas.frame.winfo_children():
             w.destroy()
         for chat in self.chats.values():
             chat_preview = ChatPreview(self.chats_canvas.frame, self, chat)
             chat_preview.pack(fill = tk.X)
             tk.Frame(self.chats_canvas.frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
+        
+        for i in range(2):
+            self.chats_canvas.frame.update_idletasks()
+            self.chats_canvas.on_canvas_configure(None)
+        self.update()
 
 
     def load_message_frames(self) -> None:
@@ -1069,16 +1130,14 @@ class LoggedGUI(NoFrame):
         entry_send.grid_rowconfigure(0, weight = 1)
         entry_send.grid(row = 4, column = 0, sticky = "news")
 
-        self.entry = tk.Entry(entry_send, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.entry = tk.Entry(entry_send, state = "disabled", background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.entry.bind("<Return>", self.send_message)
         self.entry.grid(row = 0, column = 0, sticky = "news", padx = 15, pady = 5)
         tk.Button(entry_send, image = self.images["send"], border = 0, background = "#F0F0F0", command = self.send_message).grid(row = 0, column = 1, sticky = "news")
         s = Sizegrip(entry_send, style = "TSizegrip")
         s.grid(row = 0, column = 2, sticky="news")
 
-        s.bind("<ButtonPress-1>", self.start_resize)
-        s.bind("<B1-Motion>", self.do_resize)
-        s.bind("<ButtonRelease-1>", self.stop_resize)
+        s.bind("<B1-Motion>", self.on_resize)
 
         #tk.Label(entry_send, text = "  ", background = APP_BG_COLOR).grid(row = 0, column = 2)
     

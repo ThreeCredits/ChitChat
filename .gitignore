@@ -133,10 +133,8 @@ tests/
 generate_icons.py
 note.txt
 e2ee.py
-cipher.py
-
-# Key files
 .keys/
+chats.txt
 
 # Ngrok utilities
 ngrok.exe
@@ -144,3 +142,4 @@ ngrok
 startngrok
 startngrok.bat
 startngrok.sh
+
