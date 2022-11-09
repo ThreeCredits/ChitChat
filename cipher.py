@@ -5,7 +5,7 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 import base64
-import pickle
+import json
 
 
 def send_ciphered_message(message, client, identity):
