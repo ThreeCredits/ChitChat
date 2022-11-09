@@ -47,3 +47,5 @@ class Packet:
     def append(self, item: PacketItem):
         self.data.append(item)
 
+    def clear(self):
+        self.data = []
