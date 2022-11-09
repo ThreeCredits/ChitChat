@@ -137,3 +137,10 @@ cipher.py
 
 # Key files
 .keys/
+
+# Ngrok utilities
+ngrok.exe
+ngrok
+startngrok
+startngrok.bat
+startngrok.sh
