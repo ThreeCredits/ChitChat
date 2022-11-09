@@ -365,6 +365,9 @@ class Server():
                     case "get_unread_messages":
                         # Get the unread messages of a chat
                         self._get_unread_messages(job)
+                    case "set_status":
+                        # Set the status of a user
+                        self._set_status(job)
 
                 pass
             time.sleep(WORKER_THREAD_QUEUE_CHECK_DELAY)
@@ -643,6 +646,31 @@ class Server():
         )
         # Put the response in the queue
         self.queue.put_response(job.job_tag, response)
+        return job.job_tag
+    
+    def set_status(self, user_id, status):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "set_status",
+            args = {
+                "user_id": user_id,
+                "status": status
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _set_status(self, job):
+        """
+        The _set_status method will query the db, updating the user status.
+        It will be called by the _worker_thread function.
+        """
+        query = "Update_user_state"
+        response = self.dbms.query(self.queue, job.job_tag, query, (
+            job.args["status"],
+            job.args["user_id"]
+        ), procedure=True, fetch = False)
         return job.job_tag
 
     def shutdown(self):
