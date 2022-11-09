@@ -126,14 +126,8 @@ DELIMITER ;
 -- Trigger `user`
 --
 DELIMITER $$
-CREATE TRIGGER `Clean_up_user` AFTER DELETE ON `user` FOR EACH ROW BEGIN
-DELETE FROM participate
-WHERE participate.Id_user = old.ID;
-
-UPDATE message
-SET message.Id_sender = 1
-WHERE message.Id_sender = old.ID;
-END
+CREATE TRIGGER `Clean_up_user` AFTER DELETE ON `user` FOR EACH ROW DELETE FROM participate
+WHERE participate.Id_user = old.ID
 $$
 DELIMITER ;
 

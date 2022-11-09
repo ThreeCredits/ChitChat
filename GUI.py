@@ -1,16 +1,39 @@
 import os
 import tkinter as tk
+from tkinter.ttk import Sizegrip
 
 from chat import *
+from cipher import *
 from constants import *
 from PIL import ImageTk, Image
-from threading import Thread
+import mouse
 from typing import Tuple, Any, List
+from network import Network
+
+import socket, pickle, threading
+from identity import Identity
+from message import *
+from utils import *
+
+from threading import Thread
+
+s: socket.socket = None
+self_identity: Identity = Identity()
+server_identity: Identity = None
+out_packet: Packet = None
 
 
 
 class NoFrame(tk.Toplevel):
-    def __init__(self, title: str, size: Tuple[int, int], bg: str = "white"):
+    """
+    Creates a frameless tkinter window that is controlled by an hidden window.
+    """
+    def __init__(self, title: str, size: Tuple[int, int], bg: str = "white") -> None:
+        """
+        :param title: the title of the window
+        :param size: a tuple containing the desired width and height
+        :param bg: the background color
+        """
         # Creating a hidden window that handles the minimization of the main window
         self.hidden_root = tk.Tk()
         self.hidden_root.geometry("0x0")
@@ -37,17 +60,31 @@ class NoFrame(tk.Toplevel):
         self.start_y = None
         self.old_size = size
 
+        #self.on_focus(None)
+
 
     def minimize(self) -> None:
+        """
+        minimized the window.
+        """
         self.hidden_root.iconify()
 
 
     def quit(self) -> None:
+        """
+        closes the window.
+        """
+        self.destroy()
         self.hidden_root.destroy()
 
 
     def on_focus(self, event: tk.Event) -> None:
+        """
+        lifts the window.
+        """
         self.lift()
+
+ 
 
     
     def center(self) -> Tuple[int, int]:
@@ -59,44 +96,54 @@ class NoFrame(tk.Toplevel):
         x = self.winfo_screenwidth()/2 - self.winfo_width()/2
         y = self.winfo_screenheight()/2 - self.winfo_height()/2
         self.geometry('+%d+%d'%(x,y))
-        print(self.winfo_width(),self.winfo_height())
         return x, y
 
 
-    def get_mouse_position(self) -> Tuple[int, int]:
-        return self.winfo_pointerx() + self.winfo_x(), self.winfo_pointery() + self.winfo_y()
-
-    
     def start_move(self, event: tk.Event) -> None:
+        """
+        Called when the user starts dragging the window, toggles fullscreen if the window was fullscreen.
+        """
+        mx, my = mouse.get_position()
         if self.is_fullscreen():
             self.toggle_fullscreen(False)
-            mx, my = self.get_mouse_position()
-            self.start_x = event.x//self.old_size[0]
-            self.start_y = event.y//self.old_size[1]
+            self.delta_x = self.old_size[0]//2
+            self.delta_y = 15
+            self.do_move(None)
         else:
-            self.start_x = event.x
-            self.start_y = event.y
+            self.delta_x = mx - self.winfo_x()
+            self.delta_y = my - self.winfo_y()
+
         
 
+    def do_move(self, event: tk.Event) -> None:
+        """
+        Called during the window dragging, updates its position
+        """
+        mx, my = mouse.get_position()
+        x = -self.delta_x + mx
+        y = -self.delta_y + my
+        self.geometry(f"+{x}+{y}")
+
+
     def stop_move(self, event: tk.Event) -> None:
-        self.start_x = None
-        self.start_y = None
-        if self.get_mouse_position()[1] < 5:
+        """
+        Called when the user stops dragging the window, if the window is released on the top of the screen, it switches to fullscreen.
+        """
+        self.delta_x = None
+        self.delta_y = None
+        if mouse.get_position()[1] < 5:
             self.toggle_fullscreen()
 
-
-    def do_move(self, event: tk.Event) -> None:
-        deltax = event.x - self.start_x
-        deltay = event.y - self.start_y
-        x = self.winfo_x() + deltax
-        y = self.winfo_y() + deltay
-        self.geometry(f"+{x}+{y}")
-    
     
     def is_fullscreen(self) -> bool:
+        ":return: True if the window is on fullscreen, else False"
         return self.winfo_width() == self.winfo_screenwidth() and self.winfo_height() == self.winfo_screenheight()
     
+
     def toggle_fullscreen(self) -> None:
+        """
+        If the window is not fullscreen, it swhitches to fullscreen and viceversa.
+        """
         return
 
 
@@ -105,14 +152,14 @@ class ScrollableFrame(tk.Frame):
     """
     Creates a frame with a scrollable canvas and a vertical scollbar inside.
     """
-    def __init__(self, parentObject: tk.Frame, bg: Tuple[int, int, int], separator_color = None) -> None:
+    def __init__(self, parent_object: tk.Frame, bg: Tuple[int, int, int], separator_color: Tuple[int, int, int] = None) -> None:
         """
-        :param parentObject: will contain this scrollable frame
+        :param parent_object: will contain this scrollable frame
         :param bg: the background color
         :param separator_color: if not None, creates a vertical separator on the left of the scrollbar
         """
         self.separator_color = separator_color
-        tk.Frame.__init__(self, parentObject, bg = bg)
+        tk.Frame.__init__(self, parent_object, bg = bg)
         self.canvas = tk.Canvas(self, borderwidth=0, bg = bg, highlightthickness=0)
         self.canvas.configure(width = 0) # weird fix
         self.frame = tk.Frame(self.canvas, bg = bg)
@@ -181,13 +228,13 @@ class ChatPreview(tk.Frame):
     """
     Creates a frame that allows to visualize the preview (name, picture, last message) of a given chat.
     """
-    def __init__(self, parentObject: tk.Frame, gui: NoFrame, chat: Chat) -> None:
+    def __init__(self, parent_object: tk.Frame, gui: NoFrame, chat: Chat) -> None:
         """
-        :param parentObject: will contain the chat preview
+        :param parent_object: will contain the chat preview
         :param gui: the gui object where this widget is contained (needed to access chats)
         :param chat: the chat to display
         """
-        tk.Frame.__init__(self, parentObject, background = APP_MAIN_COLOR_DARK)
+        tk.Frame.__init__(self, parent_object, background = APP_MAIN_COLOR_DARK)
         self.chat = chat
         self.gui = gui
         
@@ -195,7 +242,7 @@ class ChatPreview(tk.Frame):
         self.grid_columnconfigure(1, weight = 1)
         self.grid_rowconfigure(0, weight = 1)
 
-        img = tk.Label(self, image = gui.images[chat.image_name], border = 0, bg = APP_MAIN_COLOR)
+        img = tk.Label(self, image = gui.images["user"], border = 0, bg = APP_MAIN_COLOR)
         img.grid(row = 0, column = 0)
 
         chat_info_frame = tk.Frame(self, bg = APP_MAIN_COLOR)
@@ -210,7 +257,7 @@ class ChatPreview(tk.Frame):
         chat_name_frame.grid(row = 0, column = 0, sticky = "ew")
 
         chat_preview_frame = tk.Frame(chat_info_frame, bg = APP_MAIN_COLOR)
-        l2 = tk.Label(chat_preview_frame, text = chat.messages[-1].content, fg = APP_BG_COLOR, bg = APP_MAIN_COLOR)
+        l2 = tk.Label(chat_preview_frame, text = (chat.messages[-1].content if len(chat.messages) > 0 else ""), fg = APP_BG_COLOR, bg = APP_MAIN_COLOR, font = (APP_FONT, 9))
         l2.pack(side = tk.LEFT)
         chat_preview_frame.grid(row = 1, column = 0, sticky = "news")
 
@@ -237,7 +284,8 @@ class ChatPreview(tk.Frame):
             w.configure(bg = APP_MAIN_COLOR)
         
         self.gui.current_chat = self.chat
-        self.gui.load_messages()
+        self.gui.app_title.config(text = "ChitChat - " + self.chat.chat_name)
+        self.gui.load_message_frames()
 
 
 
@@ -253,10 +301,12 @@ class MessageFrame(tk.Frame):
         tk.Frame.__init__(self, gui.messages_canvas.frame, bg = APP_BG_COLOR)
 
         if type(message.content) == str:
-            msg_frame = tk.Label(self , text = message.content, font = (APP_FONT, 10), wraplengt = 250, fg = APP_BG_COLOR, bg = APP_MAIN_COLOR, justify = tk.LEFT)
+            msg_frame = tk.Frame(self, bg = APP_MAIN_COLOR)
+            tk.Label(msg_frame , text = message.author[0] + " #" + str(message.author[1]), font = (APP_FONT, 10, "bold"), wraplengt = 250, fg = APP_BG_COLOR, bg = APP_MAIN_COLOR, justify = tk.LEFT).pack(anchor = "w")
+            tk.Label(msg_frame , text = message.content, font = (APP_FONT, 10), wraplengt = 250, fg = APP_BG_COLOR, bg = APP_MAIN_COLOR, justify = tk.LEFT).pack(anchor = "w")
         else: msg_frame = None #TODO
 
-        if message.chat.users[message.author] == gui.user_name:
+        if (message.author[0], message.author[1]) == (gui.user_name, gui.tag):
             msg_frame.grid(row = 0, column = 0)
 
             tail_frame = tk.Frame(self, bg = APP_BG_COLOR)
@@ -284,26 +334,69 @@ class ConnectGUI(NoFrame):
 
         self.create_title_bar()
         self.init_widgets()
-
-        self.lift()
+        
         self.mainloop()
 
     
     def connect(self) -> None:
+        """
+        Tryes to start a connection with the given server.
+        """
+        global s, self_identity, server_identity
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            address = (self.server.get(), int(self.port.get()))
+        except:
+            self.error.config(text = "[Error] Invalid port")
+            return
+
+        try:
+            s.connect(address)
+        except Exception as e:
+            self.error.config(text = str(e))
+            return
+
         print("connected")
+        try:
+            msg = pickle.loads(s.recv(32 * 1024))
+        except Exception as e:
+            self.error.config(text = str(e))
+            s.close()
+            return
+
+        if msg[0].type == "backoff": #TODO costanti
+            self.error.config(text = "[Error] Blacklisted until " + str(msg[0].data))
+            s.close()
+            return
+        server_identity = Identity(pub_bytes = msg[0].data)
+        
+        # send key
+        s.send(pickle.dumps(
+            Packet(
+                [
+                    PacketItem("pub_key", self_identity.export_public_key_bytes())
+                ]
+            )
+        ))
+
+
         self.quit()
         LoginGUI()
 
 
     def create_title_bar(self) -> None:
+        """
+        Creates a custom title bar with the app logo.
+        """
         green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
         green_frame.pack(fill = tk.X)
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
-        title_frame.pack(fill = tk.X, padx = 14)
+        title_frame.pack(fill = tk.X, padx = 8)
 
         l1 = tk.Label(title_frame, image = self.image, border = 0)
         l1.pack(side = tk.LEFT)
-        l2 = tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 32, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR)
+        l2 = tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 30, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR)
         l2.pack(side = tk.RIGHT)
 
         ###
@@ -323,6 +416,9 @@ class ConnectGUI(NoFrame):
 
 
     def init_widgets(self) -> None:
+        """
+        Creates the widgets.
+        """
         server_port_frame = tk.Frame(self, bg = APP_BG_COLOR)
         server_port_frame.grid_columnconfigure(0, weight = 2)
         server_port_frame.grid_columnconfigure(1, weight = 1)
@@ -340,7 +436,8 @@ class ConnectGUI(NoFrame):
         self.port = tk.Entry(port_frame, width = 20, background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.port.pack(fill = tk.X, padx = 3)
 
-        self.error = tk.Label(self, text = "Error", fg = "#DF2C2C", bg = APP_BG_COLOR).pack(anchor = "w", padx = 10)
+        self.error = tk.Label(self, text = "", fg = "#DF2C2C", bg = APP_BG_COLOR)
+        self.error.pack(anchor = "w", padx = 10)
 
         buttons_frame = tk.Frame(self, bg = APP_BG_COLOR)
         buttons_frame.pack(side = tk.BOTTOM, fill = tk.BOTH, padx = 10, pady = 5)
@@ -367,25 +464,63 @@ class LoginGUI(NoFrame):
         self.main_frame = tk.Frame(self, bg = APP_BG_COLOR)
         self.main_frame.grid(row = 1, column = 0, sticky = "news")
         self.init_login_widgets()
-
-        self.lift()
+    
         self.mainloop()
 
 
     def register(self) -> None:
-        self.quit()
-        LoggedGUI()
+        username = self.username.get()
+        if len(username) == 0:
+            self.error.config(text = "[Error] Please enter a username")
+            return
+        if self.password.get() != self.password2.get():
+            self.error.config(text = "[Error] Passwords do not match")
+            return
+        if not is_secure(self.password.get()):
+            self.error.config(text = "[Error] Bad password, must contain at least 12 characters, one uppercase character, one lower case character and one digit")
+            return
+        if len(username) == len(self.password.get()):
+            self.error.config(text = "[Error] Usarname and password cannot be the same!")
+            return
+        p = Packet(
+            [#TODO costanti
+                PacketItem("register", (username, self.password.get()))
+            ]
+        )
+        send_ciphered_message(p, s, server_identity)
+        outcome = receive_ciphered_message(s, self_identity)
+        if outcome[0].data:
+            self.quit()
+            LoggedGUI(username, int(outcome[1].data))
+        else:
+            self.error.config(text = outcome[1].data)
+
 
     
     def login(self) -> None:
-        # do login stuff
-
-        # if login success...
+        username = self.username.get()
+        tag = int(self.tag.get())
+        p = Packet(
+            [#TODO costanti
+                PacketItem("login", (username, tag, self.password.get()))
+            ]
+        )
+        send_ciphered_message(p, s, server_identity)
+        outcome = receive_ciphered_message(s, self_identity)
+        if outcome[0].data:
+            print("success")
+        else:
+            print("login error")
+            return
+        # if login success... TODO
         self.quit()
-        LoggedGUI()
+        LoggedGUI(username, tag)
 
     
     def create_title_bar(self) -> None:
+        """
+        Creates a custom title bar with the app logo.
+        """
         green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
         green_frame.grid(row = 0, column = 0, sticky = "ew")
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
@@ -414,6 +549,9 @@ class LoginGUI(NoFrame):
         ###
     
     def init_register_widgets(self) -> None:
+        """
+        Creates the register widgets.
+        """
         # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
         self.hidden_root.title("ChitChat - Register")
 
@@ -426,15 +564,16 @@ class LoginGUI(NoFrame):
         self.username.pack(fill = tk.X, padx = 10)
 
         tk.Label(self.main_frame, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
-        self.password = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password = tk.Entry(self.main_frame, width = 0, show = '•',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password.pack(fill = tk.X, padx = 10)
 
         tk.Label(self.main_frame, text = "Confirm Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
-        self.password2 = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password2 = tk.Entry(self.main_frame, width = 0, show = '•',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password2.pack(fill = tk.X, padx = 10)
 
 
-        self.error = tk.Label(self.main_frame, text = "Error", fg = "#DF2C2C", bg = APP_BG_COLOR).pack(anchor = "w", padx = 10)
+        self.error = tk.Label(self.main_frame, text = "", fg = "#DF2C2C", bg = APP_BG_COLOR, wraplength = 330, justify = tk.LEFT)
+        self.error.pack(anchor = "w", padx = 10)
 
         buttons_frame = tk.Frame(self.main_frame, bg = APP_BG_COLOR)
         buttons_frame.pack(side = tk.BOTTOM, fill = tk.BOTH, padx = 10, pady = 5)
@@ -457,6 +596,9 @@ class LoginGUI(NoFrame):
 
 
     def init_login_widgets(self) -> None:
+        """
+        Creates the login widgets.
+        """
         # TODO: aggiungere font = APP_FONT dove manca in tutti i widget in questo file
         #for w in self.main_frame.winfo_children():
         #    w.destroy()
@@ -483,11 +625,12 @@ class LoginGUI(NoFrame):
         self.tag.pack(fill = tk.X, padx = 3)
 
         tk.Label(self.main_frame, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
-        self.password = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password = tk.Entry(self.main_frame, width = 0, show = '•',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password.pack(fill = tk.X, padx = 10)
 
 
-        self.error = tk.Label(self.main_frame, text = "Error", fg = "#DF2C2C", bg = APP_BG_COLOR).pack(anchor = "w", padx = 10)
+        self.error = tk.Label(self.main_frame, text = "", fg = "#DF2C2C", bg = APP_BG_COLOR)
+        self.error.pack(anchor = "w", padx = 10)
 
         buttons_frame = tk.Frame(self.main_frame, bg = APP_BG_COLOR)
         buttons_frame.pack(side = tk.BOTTOM, fill = tk.BOTH, padx = 10, pady = 5)
@@ -508,50 +651,108 @@ class LoginGUI(NoFrame):
         
 
 
+
+def out_handler() -> None:
+    """
+    TODO
+    """
+    global s, server_identity, self_identity, out_packet
+
+    print("out handler thread started.")
+    out_packet = Packet([])
+    while True:
+        out_packet.append(PacketItem("ping", data = datetime.datetime.now()))
+        out_packet.append(PacketItem("msg_get", data = None)) # get unread messages
+        num_items = len(out_packet.data)
+        send_ciphered_message(out_packet, s, server_identity)
+        if num_items != len(out_packet.data):
+            print("***WARNING*** some packetitems were not sent, before", num_items, "now", len(out_packet.data))
+        out_packet.clear()
+
+        #print("ping:", datetime.datetime.now() - send_date)
+        time.sleep(0.5)
+    print("connection handler thread closed.")
+
+
+def in_handler(gui: NoFrame) -> None:
+    """
+    TODO
+    """
+    while True:
+        msg = receive_ciphered_message(s, self_identity)
+        for item in msg:
+            if item.type == "pong": #TODO fare il match e aggiornare python TODO COSTANTI
+                #case "pong":
+                    gui.ping = round((datetime.datetime.now() - item.data).total_seconds() * 1000)
+                    gui.status_label.config(text = STATUS_STRING[gui.status] + " - " + str(gui.ping) + "ms")
+            
+            elif item.type == "chat_create_success":#TODO costanti
+                    print("users:", item.data[3])
+                    gui.chats[item.data[0]] = (Chat(item.data[0], item.data[1], item.data[2], users = item.data[3]))
+                    gui.load_chat_previews()
+
+            elif item.type == "msg":#TODO costanti TODO ordinare per data
+                    print("received message", item.data)
+                    msg = ChatMessage(number = item.data[1], author = (item.data[2], item.data[3]), date = item.data[4], content = item.data[5].decode("utf-8"))
+                    gui.chats[item.data[0]].append_message(msg)
+                    if gui.current_chat:
+                        if item.data[0] == gui.current_chat.id:
+                            MessageFrame(gui, msg)
+                            # Fix scroll region and scroll to the bottom
+                            for i in range(2): 
+                                gui.messages_canvas.frame.update_idletasks()
+                                gui.messages_canvas.on_canvas_configure(None)
+                                gui.messages_canvas.canvas.yview("moveto", "1.0")
+
+
+
+
 class LoggedGUI(NoFrame):
-    def __init__(self) -> None:
+    def __init__(self, username, tag) -> None:
         NoFrame.__init__(self, "ChitChat", MIN_SIZE)
-
+        self.minsize(*MIN_SIZE)
         # Account
-        self.user_name = "Bruno Montalto"
+        self.user_name = username
+        self.tag = tag
         self.status = STATUS_ONLINE
-
-        c = Chat("user", "user", users = ["Bruno Montalto", "user"])
-        c2 = Chat("Fabbio", "Bruno Montalto", users = ["Bruno Montalto", "user"])
-        for i in range(20):
-            c.append_messages(ChatMessage(c, 1, datetime.datetime.now(), "This is a message"), ChatMessage(c, 0, datetime.datetime.now(), "This is a longer message to test if the wrapping is working correctly"))
-        for i in range(4):
-            c2.append_messages(ChatMessage(c, 1, datetime.datetime.now(), "This is a different message"), ChatMessage(c, 0, datetime.datetime.now(), "This is an answer to the different message"))
-        self.chats = [c, c2]
-        self.current_chat = self.chats[0]
+        self.ping = 0
+        
+        self.chats = {17: Chat(17, "a", "b", [("bruno", 2, None), ("si spera",1, None)])}
+        self.current_chat = None
 
         self.images = {}
         self.load_images()
 
         self.init_widgets()
-        self.load_chats()
-        self.load_messages()
+        Thread(target = in_handler, args = (self,), daemon = True).start()
+        Thread(target = out_handler, daemon = True).start()
+        self.load_chat_previews()
+        self.load_message_frames()
 
 
-        self.bind("<Configure>", self.on_resize)
-        self.lift()
-        
-    
+        #self.bind("<Configure>", self.on_resize)
+
+        self.resizing = False
         self.mainloop()
+    
+    def start_resize(self, event: tk.Event) -> None:
+        self.messages_yview = self.messages_canvas.canvas.yview()
+        print("start yview", self.messages_yview)
 
 
+    def do_resize(self, event: tk.Event) -> None:
+        self.messages_canvas.frame.update_idletasks()
+        self.messages_canvas.on_canvas_configure(None)
+        self.messages_canvas.canvas.yview("moveto", str(self.messages_yview[1]))
+        #self.update()
 
-    def on_resize(self, event: tk.Event) -> None:
-        """
-        Fixes the proportion between the side panel and the main frame when the window is resized
-        """
-        if event.widget.widgetName == "toplevel":
-            perc = (event.width - MIN_SIZE[0])/(self.winfo_screenwidth() - MIN_SIZE[0])
-            p2 = (0.7 + perc)/7
-            p2 *= self.winfo_screenwidth()
-            p2 = round(p2)
-            self.winfo_children()[0].grid_columnconfigure(0, weight = 100)
-            self.winfo_children()[0].grid_columnconfigure(1, weight = p2)
+
+    def stop_resize(self, event: tk.Event):
+        print("resetting yview:", self.messages_yview[1])
+        self.messages_canvas.frame.update_idletasks()
+        self.messages_canvas.on_canvas_configure(None)
+        self.messages_canvas.canvas.yview("moveto", str(self.messages_yview[1]))
+        print("yview is now:", self.messages_canvas.canvas.yview())
 
 
     def toggle_fullscreen(self, position_reset: bool = True) -> None:
@@ -572,14 +773,113 @@ class LoggedGUI(NoFrame):
         self.winfo_children()[0].winfo_children()[1].winfo_children()[0].winfo_children()[2].config(image = self.images["dimension1"])
 
 
-    def load_chats(self):
-        for chat in self.chats:
+
+    def open_new_chat_menu(self) -> None:
+        for w in self.newchat_frame.winfo_children():
+            w.destroy()
+        tk.Label(self.newchat_frame, text = "Chat name", bg = "#F0F0F0", fg = APP_MAIN_COLOR, font = (APP_FONT, 9, "bold")).pack(anchor = "w", padx = 10)
+        self.newchat_name = tk.Entry(self.newchat_frame, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.newchat_name.pack(anchor = "w", padx = 10, pady = 3, fill = tk.X)
+
+        tk.Label(self.newchat_frame, text = "Chat Description", bg = "#F0F0F0", fg = APP_MAIN_COLOR, font = (APP_FONT, 9, "bold")).pack(anchor = "w", padx = 10)
+        self.newchat_description = tk.Text(self.newchat_frame, width = 0, height = 3, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.newchat_description.pack(anchor = "w", padx = 10, pady = 3, fill = tk.X)
+
+        user_tag_frame = tk.Frame(self.newchat_frame, bg = "#F0F0F0")
+        user_tag_frame.grid_columnconfigure(0, weight = 2)
+        user_tag_frame.grid_columnconfigure(1, weight = 0)
+        user_tag_frame.grid_columnconfigure(2, weight = 1)
+        user_tag_frame.pack(padx = 10, pady = 3, fill = tk.X)
+
+        user_frame = tk.Frame(user_tag_frame, bg = "#F0F0F0")
+        user_frame.grid(row = 0, column = 0, sticky = "news")
+        tk.Label(user_frame, text = "User", bg = "#F0F0F0", fg = APP_MAIN_COLOR, font = (APP_FONT, 9, "bold")).pack(anchor = "w")
+        self.new_chat_user = tk.Entry(user_frame, width = 0, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.new_chat_user.pack(anchor = "w", fill = tk.X)
+        
+        tk.Label(user_tag_frame, text = "", bg = "#F0F0F0").grid(row = 0, column = 1)
+
+        tag_frame = tk.Frame(user_tag_frame, bg = "#F0F0F0")
+        tag_frame.grid(row = 0, column = 2, sticky = "news")
+        tk.Label(tag_frame, text = "TAG", bg = "#F0F0F0", fg = APP_MAIN_COLOR, font = (APP_FONT, 9, "bold")).pack(anchor = "w")
+        self.new_chat_tag = tk.Entry(tag_frame, width = 0, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.new_chat_tag.pack(anchor = "w", fill = tk.X)
+
+        tk.Label(self.newchat_frame, text = "", bg = "#F0F0F0", font = (APP_FONT, 1, "bold")).pack()
+
+        tk.Frame(self.newchat_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
+        tk.Button(self.newchat_frame, text = "Create chat", bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, font = (APP_FONT, 9, "bold"), command = self.new_chat).pack(fill = tk.X)
+        tk.Frame(self.newchat_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
+        tk.Button(self.newchat_frame, text = "Cancel", bg = APP_BG_COLOR, activebackground = APP_BG_COLOR_DARK, fg = APP_MAIN_COLOR, activeforeground = APP_MAIN_COLOR, border = 0, font = (APP_FONT, 9, "bold"), command = self.close_new_chat_menu).pack(fill = tk.X)
+        tk.Frame(self.newchat_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
+    
+    def close_new_chat_menu(self) -> None:
+        for w in self.newchat_frame.winfo_children():
+            w.destroy()
+        tk.Button(self.newchat_frame, text = "New Chat", bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, font = (APP_FONT, 9, "bold"), command = self.open_new_chat_menu).pack(fill = tk.X)
+        tk.Frame(self.newchat_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
+
+    
+    def new_chat(self) -> None:
+        global out_packet
+
+        #TODO costanti
+        print("sending request to create new chat")
+        out_packet.append(PacketItem("create_chat", (self.newchat_name.get(), self.newchat_description.get(1.0, tk.END), [(self.new_chat_user.get(), self.new_chat_tag.get())])  ))
+    
+
+    def send_message(self, event: tk.Event = None) -> None:
+        global out_packet
+        #TODO costanti TODO attenzione se current_chat è null
+        print("sending message to chat", self.current_chat.id, '"', self.entry.get(), '"')
+        out_packet.append(PacketItem("msg_send", (self.current_chat.id, self.entry.get())))
+        self.entry.delete(0, tk.END)
+    
+
+    def set_status(self, status: int):
+        self.status = status
+        self.status_label.config(text = STATUS_STRING[self.status] + " - " + str(self.ping) +"ms")
+        print("sending request to set status to", STATUS_STRING[self.status])
+        out_packet.append(PacketItem("set_status", status))
+
+
+    def logout(self) -> None:
+        p = Packet(
+            [#TODO constants
+                PacketItem("logout", None)
+            ]
+        )
+        send_ciphered_message(p, s, server_identity)
+        self.quit()
+        ConnectGUI()
+
+    def load_messages(self):
+        with open("chats.txt", "r") as file:
+            pass
+    
+
+    def save_messages(self):
+        with open("chats.txt", "a+") as file:
+            pass
+
+
+    def load_chat_previews(self) -> None:
+        """
+        Creates a chat preview in the side panel for every chat
+        """
+        for w in self.chats_canvas.frame.winfo_children():
+            w.destroy()
+        for chat in self.chats.values():
             chat_preview = ChatPreview(self.chats_canvas.frame, self, chat)
             chat_preview.pack(fill = tk.X)
             tk.Frame(self.chats_canvas.frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
 
 
-    def load_messages(self):
+    def load_message_frames(self) -> None:
+        """
+        Loads the messages of the current chat
+        """
+        if not self.current_chat: return
         # Destroy & create new scrollable frame
         self.messages_canvas.grid_forget()
         self.messages_canvas.destroy()
@@ -595,6 +895,8 @@ class LoggedGUI(NoFrame):
             self.messages_canvas.frame.update_idletasks()
             self.messages_canvas.on_canvas_configure(None)
             self.messages_canvas.canvas.yview("moveto", "1.0")
+        
+        self.update()
     
     
     def load_images(self) -> None:
@@ -623,17 +925,18 @@ class LoggedGUI(NoFrame):
         #TODO: Ci sono molti self. inutili
 
         # Create main container
-        self.main_container = tk.Frame(self)
-        self.main_container.grid_columnconfigure(0, weight=1)
-        self.main_container.grid_columnconfigure(1, weight=3)
-        self.main_container.grid_rowconfigure(0, weight = 1)
-        self.main_container.pack(expand=True, fill = tk.BOTH)
+        main_container = tk.Frame(self)
+        main_container.grid_columnconfigure(0, weight=2)
+        main_container.grid_columnconfigure(1, weight=3)
+        main_container.grid_rowconfigure(0, weight = 1)
+        main_container.pack(expand=True, fill = tk.BOTH)
 
         #* --- SIDE PANEL FRAME --- #
-        side_panel_frame = tk.Frame(self.main_container, bg = APP_MAIN_COLOR)
+        side_panel_frame = tk.Frame(main_container, bg = APP_MAIN_COLOR)
         side_panel_frame.grid_rowconfigure(0, weight = 0)
         side_panel_frame.grid_rowconfigure(1, weight = 0)
-        side_panel_frame.grid_rowconfigure(2, weight = 1)
+        side_panel_frame.grid_rowconfigure(2, weight = 0)
+        side_panel_frame.grid_rowconfigure(3, weight = 1)
         side_panel_frame.grid_columnconfigure(0, weight = 1)
         side_panel_frame.grid(row = 0, column = 0, sticky = "news")
 
@@ -647,9 +950,14 @@ class LoggedGUI(NoFrame):
         
 
         #*** Profile pic 
-        c = tk.Button(profile_frame, image = self.images["Bruno Montalto"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, width = 60, height = 60)
-        c.grid(row = 0, column = 0, sticky = "news")
-
+        profile_pic = tk.Menubutton(profile_frame, image = self.images["Bruno Montalto"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, width = 60, height = 60)
+        profile_pic.menu = tk.Menu(profile_pic, tearoff = 0)
+        profile_pic["menu"] = profile_pic.menu
+        profile_pic.menu.add_cascade(label = "online", command = lambda: self.set_status( STATUS_ONLINE ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.menu.add_cascade(label = "away", command = lambda: self.set_status( STATUS_AWAY ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.menu.add_cascade(label = "busy", command = lambda: self.set_status(  STATUS_BUSY ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.menu.add_cascade(label = "invisible", command = lambda: self.set_status( STATUS_INVISIBLE ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.grid(row = 0, column = 0, sticky = "news")
         #*** Profile info frame
         profile_info_frame = tk.Frame(profile_frame, background = APP_MAIN_COLOR)
         profile_info_frame.grid_rowconfigure(0, weight = 0)
@@ -664,13 +972,16 @@ class LoggedGUI(NoFrame):
         username_buttons_frame.bind('<B1-Motion>', self.do_move)
         username_buttons_frame.grid(row = 0, column = 0, sticky = "news")
 
-        username = tk.Label(username_buttons_frame, text = self.user_name, font = (APP_FONT, 12, "bold"), background = APP_MAIN_COLOR, fg = APP_BG_COLOR)
+        username = tk.Label(username_buttons_frame, text = self.user_name + " #" + str(self.tag), font = (APP_FONT, 12, "bold"), background = APP_MAIN_COLOR, fg = APP_BG_COLOR)
         username.pack(side = tk.LEFT)
         username.bind('<ButtonPress-1>', self.start_move)
         username.bind('<ButtonRelease-1>', self.stop_move)
         username.bind('<B1-Motion>', self.do_move)
 
-        more_button = tk.Button(username_buttons_frame, image = self.images["more"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK)
+        more_button = tk.Menubutton(username_buttons_frame, image = self.images["more"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK)
+        more_button.menu = tk.Menu(more_button, tearoff = 0)
+        more_button["menu"] = more_button.menu
+        more_button.menu.add_cascade(label="Logout", command = self.logout, font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
         more_button.pack(side = tk.RIGHT, fill = tk.Y)
 
         settings_button = tk.Button(username_buttons_frame, image = self.images["settings"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK)
@@ -679,25 +990,33 @@ class LoggedGUI(NoFrame):
         #**** Status
         status_frame = tk.Frame(profile_info_frame, background = APP_MAIN_COLOR)
         status_frame.grid(row = 1, column=0, sticky = "news")
-        tk.Label(status_frame, text = STATUS_STRING[self.status], background = APP_MAIN_COLOR, fg = APP_BG_COLOR).pack(side = tk.LEFT)
+        self.status_label = tk.Label(status_frame, text = STATUS_STRING[self.status] + " - " + str(self.ping) +"ms", background = APP_MAIN_COLOR, fg = APP_BG_COLOR, font = (APP_FONT, 9))
+        self.status_label.pack(side = tk.LEFT)
 
 
         #** Search bar frame
         sbar_frame = tk.Frame(side_panel_frame, background = APP_MAIN_COLOR_DARK)
         sbar_frame.grid(row = 1, column = 0, sticky = "news")
-        tk.Label(sbar_frame, text = "Search Messages", background = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR).pack()
-        tk.Entry(sbar_frame, border = 0).pack(fill = tk.X, padx = 5, pady = 5)
-        tk.Button(sbar_frame, text = "New Chat", bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, font = (APP_FONT, 9, "bold")).pack(fill = tk.X)
-        tk.Frame(sbar_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
+        tk.Label(sbar_frame, text = "Search Messages", background = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, font = (APP_FONT, 9)).pack()
+        tk.Entry(sbar_frame, border = 0, font = (APP_FONT, 9)).pack(fill = tk.X, padx = 5, pady = 5)
+        
+        
+
+
+        # New chat frame
+        self.newchat_frame = tk.Frame(side_panel_frame, bg = "#F0F0F0")
+        self.newchat_frame.grid(row = 2, column = 0, sticky = "news")
+        tk.Button(self.newchat_frame, text = "New Chat", bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, font = (APP_FONT, 9, "bold"), command = self.open_new_chat_menu).pack(fill = tk.X)
+        tk.Frame(self.newchat_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
 
         # Chats container
         self.chats_canvas = ScrollableFrame(side_panel_frame, bg = APP_MAIN_COLOR_DARK, separator_color = APP_MAIN_COLOR)
-        self.chats_canvas.grid(row = 2, column = 0, sticky = "news")
+        self.chats_canvas.grid(row = 3, column = 0, sticky = "news")
 
         #tk.Label(self.side_panel_frame, text = "side panel").pack()
 
         #* --- MAIN FRAME --- #
-        main_frame = tk.Frame(self.main_container, bg = APP_BG_COLOR)
+        main_frame = tk.Frame(main_container, bg = APP_BG_COLOR)
         self.main_frame = main_frame #TODO
         main_frame.grid_rowconfigure(0, weight = 0)
         main_frame.grid_rowconfigure(1, weight = 0)
@@ -708,29 +1027,29 @@ class LoggedGUI(NoFrame):
         main_frame.grid(row = 0, column = 1, sticky = "news")
 
         #** Title bar 
-        self.titleBar = tk.Frame(main_frame, bg = APP_BG_COLOR)
+        titleBar = tk.Frame(main_frame, bg = APP_BG_COLOR)
         #*** Close button
-        tk.Button(self.titleBar, image = self.images["close1"], border = 0, command = self.quit).pack(side = tk.RIGHT)
-        tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
+        tk.Button(titleBar, image = self.images["close1"], border = 0, command = self.quit).pack(side = tk.RIGHT)
+        tk.Frame(titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
 
         #*** Resize button
-        self.resize_button = tk.Button(self.titleBar, image = self.images["dimension21"], border = 0, command = self.toggle_fullscreen).pack(side = tk.RIGHT)
-        tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
+        self.resize_button = tk.Button(titleBar, image = self.images["dimension21"], border = 0, command = self.toggle_fullscreen).pack(side = tk.RIGHT)
+        tk.Frame(titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
 
         #*** Minimize button
-        tk.Button(self.titleBar, image = self.images["minimize1"], border = 0, command = self.minimize).pack(side = tk.RIGHT)
-        tk.Frame(self.titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
+        tk.Button(titleBar, image = self.images["minimize1"], border = 0, command = self.minimize).pack(side = tk.RIGHT)
+        tk.Frame(titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
 
-        t = tk.Label(self.titleBar, text = self.title(), bg = APP_BG_COLOR)
-        t.pack(side = tk.LEFT)
+        self.app_title = tk.Label(titleBar, text = self.title(), bg = APP_BG_COLOR, font = (APP_FONT, 9))
+        self.app_title.pack(side = tk.LEFT)
 
-        self.titleBar.grid(row = 0, column = 0, sticky = "news")
-        t.bind('<ButtonPress-1>', self.start_move)
-        t.bind('<ButtonRelease-1>', self.stop_move)
-        t.bind('<B1-Motion>', self.do_move)
-        self.titleBar.bind('<ButtonPress-1>', self.start_move)
-        self.titleBar.bind('<ButtonRelease-1>', self.stop_move)
-        self.titleBar.bind('<B1-Motion>', self.do_move)
+        titleBar.grid(row = 0, column = 0, sticky = "news")
+        self.app_title.bind('<ButtonPress-1>', self.start_move)
+        self.app_title.bind('<ButtonRelease-1>', self.stop_move)
+        self.app_title.bind('<B1-Motion>', self.do_move)
+        titleBar.bind('<ButtonPress-1>', self.start_move)
+        titleBar.bind('<ButtonRelease-1>', self.stop_move)
+        titleBar.bind('<B1-Motion>', self.do_move)
 
         #** Horizonatal separator
         tk.Frame(main_frame, bg = APP_MAIN_COLOR).grid(row = 1, column = 0, sticky = "ew")
@@ -743,28 +1062,28 @@ class LoggedGUI(NoFrame):
         tk.Frame(main_frame, bg = APP_MAIN_COLOR).grid(row = 3, column = 0, sticky = "ew")
 
         #** Entry & send button
-        entry_send = tk.Frame(main_frame, background = APP_BG_COLOR)
+        entry_send = tk.Frame(main_frame, background = "#F0F0F0")
         entry_send.grid_columnconfigure(0, weight = 1)
         entry_send.grid_columnconfigure(1, weight = 0)
         entry_send.grid_columnconfigure(2, weight = 0)
         entry_send.grid_rowconfigure(0, weight = 1)
         entry_send.grid(row = 4, column = 0, sticky = "news")
 
-        self.entry = tk.Entry(entry_send, background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.entry = tk.Entry(entry_send, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.entry.bind("<Return>", self.send_message)
         self.entry.grid(row = 0, column = 0, sticky = "news", padx = 15, pady = 5)
-        tk.Button(entry_send, image = self.images["send"], border = 0, background = APP_BG_COLOR, command = self.foo).grid(row = 0, column = 1, sticky = "news")
-        tk.Label(entry_send, text = "  ", background = APP_BG_COLOR).grid(row = 0, column = 2)
+        tk.Button(entry_send, image = self.images["send"], border = 0, background = "#F0F0F0", command = self.send_message).grid(row = 0, column = 1, sticky = "news")
+        s = Sizegrip(entry_send, style = "TSizegrip")
+        s.grid(row = 0, column = 2, sticky="news")
+
+        s.bind("<ButtonPress-1>", self.start_resize)
+        s.bind("<B1-Motion>", self.do_resize)
+        s.bind("<ButtonRelease-1>", self.stop_resize)
+
+        #tk.Label(entry_send, text = "  ", background = APP_BG_COLOR).grid(row = 0, column = 2)
     
 
-    def foo(self):
-        print("foo")
-                
-        MessageFrame(self, ChatMessage(self.current_chat, 0, datetime.datetime.now(), self.entry.get()))
-        # Fix scroll region and scroll to the bottom
-        for i in range(2): 
-            self.messages_canvas.frame.update_idletasks()
-            self.messages_canvas.on_canvas_configure(None)
-            self.messages_canvas.canvas.yview("moveto", "1.0")
+
 
 
 
