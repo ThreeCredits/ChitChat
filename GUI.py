@@ -21,7 +21,6 @@ s: socket.socket = None
 self_identity: Identity = Identity()
 server_identity: Identity = None
 out_packet: Packet = None
-ping: int = 0
 
 
 
@@ -29,7 +28,7 @@ class NoFrame(tk.Toplevel):
     """
     Creates a frameless tkinter window that is controlled by an hidden window.
     """
-    def __init__(self, title: str, size: Tuple[int, int], bg: str = "white"):
+    def __init__(self, title: str, size: Tuple[int, int], bg: str = "white") -> None:
         """
         :param title: the title of the window
         :param size: a tuple containing the desired width and height
@@ -258,7 +257,7 @@ class ChatPreview(tk.Frame):
         chat_name_frame.grid(row = 0, column = 0, sticky = "ew")
 
         chat_preview_frame = tk.Frame(chat_info_frame, bg = APP_MAIN_COLOR)
-        l2 = tk.Label(chat_preview_frame, text = (chat.messages[-1].content if len(chat.messages) > 0 else ""), fg = APP_BG_COLOR, bg = APP_MAIN_COLOR)
+        l2 = tk.Label(chat_preview_frame, text = (chat.messages[-1].content if len(chat.messages) > 0 else ""), fg = APP_BG_COLOR, bg = APP_MAIN_COLOR, font = (APP_FONT, 9))
         l2.pack(side = tk.LEFT)
         chat_preview_frame.grid(row = 1, column = 0, sticky = "news")
 
@@ -393,11 +392,11 @@ class ConnectGUI(NoFrame):
         green_frame = tk.Frame(self, bg = APP_MAIN_COLOR_DARK)
         green_frame.pack(fill = tk.X)
         title_frame = tk.Frame(green_frame, bg = APP_MAIN_COLOR_DARK)
-        title_frame.pack(fill = tk.X, padx = 14)
+        title_frame.pack(fill = tk.X, padx = 8)
 
         l1 = tk.Label(title_frame, image = self.image, border = 0)
         l1.pack(side = tk.LEFT)
-        l2 = tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 32, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR)
+        l2 = tk.Label(title_frame, text = "ChitChat", font = (APP_FONT, 30, "bold"), bg = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR)
         l2.pack(side = tk.RIGHT)
 
         ###
@@ -565,11 +564,11 @@ class LoginGUI(NoFrame):
         self.username.pack(fill = tk.X, padx = 10)
 
         tk.Label(self.main_frame, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
-        self.password = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password = tk.Entry(self.main_frame, width = 0, show = '•',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password.pack(fill = tk.X, padx = 10)
 
         tk.Label(self.main_frame, text = "Confirm Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
-        self.password2 = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password2 = tk.Entry(self.main_frame, width = 0, show = '•',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password2.pack(fill = tk.X, padx = 10)
 
 
@@ -626,7 +625,7 @@ class LoginGUI(NoFrame):
         self.tag.pack(fill = tk.X, padx = 3)
 
         tk.Label(self.main_frame, text = "Password", bg = APP_BG_COLOR, fg = APP_MAIN_COLOR, font = (APP_FONT, 12, "bold")).pack(anchor = "w", padx = 10)
-        self.password = tk.Entry(self.main_frame, width = 0, show = '*',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.password = tk.Entry(self.main_frame, width = 0, show = '•',background = APP_BG_COLOR_DARK, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.password.pack(fill = tk.X, padx = 10)
 
 
@@ -653,7 +652,7 @@ class LoginGUI(NoFrame):
 
 
 
-def out_handler():
+def out_handler() -> None:
     """
     TODO
     """
@@ -664,7 +663,10 @@ def out_handler():
     while True:
         out_packet.append(PacketItem("ping", data = datetime.datetime.now()))
         out_packet.append(PacketItem("msg_get", data = None)) # get unread messages
+        num_items = len(out_packet.data)
         send_ciphered_message(out_packet, s, server_identity)
+        if num_items != len(out_packet.data):
+            print("***WARNING*** some packetitems were not sent, before", num_items, "now", len(out_packet.data))
         out_packet.clear()
 
         #print("ping:", datetime.datetime.now() - send_date)
@@ -672,18 +674,17 @@ def out_handler():
     print("connection handler thread closed.")
 
 
-def in_handler(gui: NoFrame):
+def in_handler(gui: NoFrame) -> None:
     """
     TODO
     """
-    global ping
     while True:
         msg = receive_ciphered_message(s, self_identity)
         for item in msg:
             if item.type == "pong": #TODO fare il match e aggiornare python TODO COSTANTI
                 #case "pong":
-                    ping = round((datetime.datetime.now() - item.data).total_seconds() * 1000)
-                    gui.status_label.config(text = STATUS_STRING[gui.status] + " - " + str(ping) + "ms")
+                    gui.ping = round((datetime.datetime.now() - item.data).total_seconds() * 1000)
+                    gui.status_label.config(text = STATUS_STRING[gui.status] + " - " + str(gui.ping) + "ms")
             
             elif item.type == "chat_create_success":#TODO costanti
                     print("users:", item.data[3])
@@ -693,7 +694,7 @@ def in_handler(gui: NoFrame):
             elif item.type == "msg":#TODO costanti TODO ordinare per data
                     print("received message", item.data)
                     msg = ChatMessage(number = item.data[1], author = (item.data[2], item.data[3]), date = item.data[4], content = item.data[5].decode("utf-8"))
-                    gui.chats[item.data[0]].append_messages(msg)
+                    gui.chats[item.data[0]].append_message(msg)
                     if gui.current_chat:
                         if item.data[0] == gui.current_chat.id:
                             MessageFrame(gui, msg)
@@ -714,6 +715,7 @@ class LoggedGUI(NoFrame):
         self.user_name = username
         self.tag = tag
         self.status = STATUS_ONLINE
+        self.ping = 0
         
         self.chats = {17: Chat(17, "a", "b", [("bruno", 2, None), ("si spera",1, None)])}
         self.current_chat = None
@@ -832,6 +834,13 @@ class LoggedGUI(NoFrame):
         print("sending message to chat", self.current_chat.id, '"', self.entry.get(), '"')
         out_packet.append(PacketItem("msg_send", (self.current_chat.id, self.entry.get())))
         self.entry.delete(0, tk.END)
+    
+
+    def set_status(self, status: int):
+        self.status = status
+        self.status_label.config(text = STATUS_STRING[self.status] + " - " + str(self.ping) +"ms")
+        print("sending request to set status to", STATUS_STRING[self.status])
+        out_packet.append(PacketItem("set_status", status))
 
 
     def logout(self) -> None:
@@ -913,7 +922,6 @@ class LoggedGUI(NoFrame):
         """
         Creates the window structure and main components
         """
-        global ping
         #TODO: Ci sono molti self. inutili
 
         # Create main container
@@ -942,9 +950,14 @@ class LoggedGUI(NoFrame):
         
 
         #*** Profile pic 
-        c = tk.Button(profile_frame, image = self.images["Bruno Montalto"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, width = 60, height = 60)
-        c.grid(row = 0, column = 0, sticky = "news")
-
+        profile_pic = tk.Menubutton(profile_frame, image = self.images["Bruno Montalto"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, width = 60, height = 60)
+        profile_pic.menu = tk.Menu(profile_pic, tearoff = 0)
+        profile_pic["menu"] = profile_pic.menu
+        profile_pic.menu.add_cascade(label = "online", command = lambda: self.set_status( STATUS_ONLINE ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.menu.add_cascade(label = "away", command = lambda: self.set_status( STATUS_AWAY ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.menu.add_cascade(label = "busy", command = lambda: self.set_status(  STATUS_BUSY ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.menu.add_cascade(label = "invisible", command = lambda: self.set_status( STATUS_INVISIBLE ), font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
+        profile_pic.grid(row = 0, column = 0, sticky = "news")
         #*** Profile info frame
         profile_info_frame = tk.Frame(profile_frame, background = APP_MAIN_COLOR)
         profile_info_frame.grid_rowconfigure(0, weight = 0)
@@ -968,7 +981,7 @@ class LoggedGUI(NoFrame):
         more_button = tk.Menubutton(username_buttons_frame, image = self.images["more"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK)
         more_button.menu = tk.Menu(more_button, tearoff = 0)
         more_button["menu"] = more_button.menu
-        more_button.menu.add_checkbutton(label="Logout", command = self.logout)
+        more_button.menu.add_cascade(label="Logout", command = self.logout, font = (APP_FONT, 9), activebackground = APP_MAIN_COLOR, activeforeground = APP_BG_COLOR)
         more_button.pack(side = tk.RIGHT, fill = tk.Y)
 
         settings_button = tk.Button(username_buttons_frame, image = self.images["settings"], border = 0, background = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK)
@@ -977,15 +990,15 @@ class LoggedGUI(NoFrame):
         #**** Status
         status_frame = tk.Frame(profile_info_frame, background = APP_MAIN_COLOR)
         status_frame.grid(row = 1, column=0, sticky = "news")
-        self.status_label = tk.Label(status_frame, text = STATUS_STRING[self.status] + " - " + str(ping) +"ms", background = APP_MAIN_COLOR, fg = APP_BG_COLOR)
+        self.status_label = tk.Label(status_frame, text = STATUS_STRING[self.status] + " - " + str(self.ping) +"ms", background = APP_MAIN_COLOR, fg = APP_BG_COLOR, font = (APP_FONT, 9))
         self.status_label.pack(side = tk.LEFT)
 
 
         #** Search bar frame
         sbar_frame = tk.Frame(side_panel_frame, background = APP_MAIN_COLOR_DARK)
         sbar_frame.grid(row = 1, column = 0, sticky = "news")
-        tk.Label(sbar_frame, text = "Search Messages", background = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR).pack()
-        tk.Entry(sbar_frame, border = 0).pack(fill = tk.X, padx = 5, pady = 5)
+        tk.Label(sbar_frame, text = "Search Messages", background = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, font = (APP_FONT, 9)).pack()
+        tk.Entry(sbar_frame, border = 0, font = (APP_FONT, 9)).pack(fill = tk.X, padx = 5, pady = 5)
         
         
 
@@ -1027,7 +1040,7 @@ class LoggedGUI(NoFrame):
         tk.Button(titleBar, image = self.images["minimize1"], border = 0, command = self.minimize).pack(side = tk.RIGHT)
         tk.Frame(titleBar, bg = APP_MAIN_COLOR).pack(side = tk.RIGHT, fill = tk.Y) # vertical separator
 
-        self.app_title = tk.Label(titleBar, text = self.title(), bg = APP_BG_COLOR)
+        self.app_title = tk.Label(titleBar, text = self.title(), bg = APP_BG_COLOR, font = (APP_FONT, 9))
         self.app_title.pack(side = tk.LEFT)
 
         titleBar.grid(row = 0, column = 0, sticky = "news")
