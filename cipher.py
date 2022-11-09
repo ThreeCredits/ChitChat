@@ -4,17 +4,42 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 import base64
-import pickle
+import json
 
 
 def send_ciphered_message(message, client, identity):
-    message = pickle.dumps(message)
+    message = pickle.dumps(message, protocol=5)
     message = identity.encrypt(message)
-    message = pickle.dumps(message)
+    message = pickle.dumps(message, protocol=5)
+    # Prefix each message with a 4-byte length (network byte order)
+    message = struct.pack('>I', len(message)) + message
     client.send(message)
 
+def receive_all(client, length):
+    data = bytearray()
+    while len(data) < length:
+        packet = client.recv(length - len(data))
+        if not packet:
+            return None
+        data.extend(packet)
+    return data
+
+def _receive_chipered_message(client):
+    # Read message length and unpack it into an integer
+    try:
+        raw_msglen = receive_all(client, 4)
+        if not raw_msglen:
+            raise Exception("Missing message length header")
+    except:
+        return None
+    msglen = struct.unpack('>I', raw_msglen)[0]
+    # Read the message data
+    return receive_all(client, msglen)
+
+
 def receive_ciphered_message(client, identity):
-    message = client.recv(32 * 1024)
+    # Receive a large message, which may have been split into multiple packets
+    message = _receive_chipered_message(client)
     message = pickle.loads(message)
     message = identity.decrypt(*message)
     message = pickle.loads(message)
