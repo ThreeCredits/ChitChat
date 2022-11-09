@@ -18,4 +18,4 @@ class User():
         """
         The string representation of the User class
         """
-        return "User: {}#{} - Password: {}".format(self.name, self.tag, self.password)
+        return "User: {}#{} - Password: {}".format(self.username, self.tag, self.password)

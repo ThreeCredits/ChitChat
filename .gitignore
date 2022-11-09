@@ -136,3 +136,10 @@ e2ee.py
 .keys/
 chats.txt
 
+# Ngrok utilities
+ngrok.exe
+ngrok
+startngrok
+startngrok.bat
+startngrok.sh
+

@@ -78,6 +78,10 @@ class LoginManager:
             attempts = 0
             while attempts < 3:
                 message = receive_ciphered_message(client, self.server.identity)
+                if not message:
+                    # We close the connection
+                    client.close()
+                    return
                 if message[0].type == "login":
                     # Parse the rest of the message
                     username = message[0].data[0]
@@ -199,6 +203,10 @@ class ClientHandler():
         self.client.settimeout(60) # since the client is already authenticated, we can set a timeout that is longer.
         while True:
             msg = receive_ciphered_message(self.client, self.server_identity)
+            if not msg:
+                # We close the connection
+                self.client.close()
+                return
             # Check if the message is a Packet, and if its data is a non empty list
             try:
                 if not isinstance(msg, Packet) or len(msg.data) == 0:
@@ -239,20 +247,58 @@ class ClientHandler():
                         # Add the messages to the packet
                         for message in result:
                             packet.append(PacketItem("msg", message))
-                            print("Sending out", message, "to", self.user_name + "#" + str(self.user_tag))
                         
                         # Send the packet
                         send_ciphered_message(packet, self.client, self.identity)
+                    case "update_chats":
+                        # We expect empty data
+                        result = self.queue.wait_for_result(self.server.update_chats(self.user_id))
+                        results = result.result
+                        # Send the result
+                        send_ciphered_message(
+                            Packet([
 
-                    case "get_chats":
-                        # We get the chats that the user is a part of
-                        # result = self.queue.wait_for_result(self.server.get_chats(self.user_id))
-                        # We send the result to the client
-                        if result["success"]:
-                            send_ciphered_message(Packet([PacketItem("success", True), PacketItem("chats", result["chats"])]), self.client, self.identity)
-                        else:
-                            send_ciphered_message(Packet([PacketItem("success", False), PacketItem("error", result["error"])]), self.client, self.identity)
+                                PacketItem("update_chats", [result.result[i][0] for i in range(len(results))])
+                            
+                            ]), self.client, self.identity)
                     
+                    case "get_chat":
+                        # We expect a chat_id
+                        chat_id = item.data
+                        result = self.queue.wait_for_result(self.server.get_chat(self.user_id, self.user_name, self.user_tag, chat_id))
+                        # If result is empty, then the user is trying to get a chat that he is not in, in which case we just ignore the request
+                        if len(result.result) == 0:
+                            continue
+                        # We send the result to the client
+                        send_ciphered_message(Packet([
+                            PacketItem("get_chat", (
+                                result["chat_id"],
+                                result["chat_name"],
+                                result["description"],
+                                result["creation_date"],
+                                result["partecipants"]
+                            )),
+                        ]), self.client, self.identity)
+                    
+                    case "get_chats":
+                        packet = Packet(data=[])
+                        # We expect a chat_id list
+                        # We get the chat
+                        for chat in item.data:
+                            result = self.queue.wait_for_result(self.server.get_chat(self.user_id, self.user_name, self.user_tag, chat))
+                            # If result is empty, then the user is trying to get a chat that he is not in, in which case we just ignore the request
+                            if not result.result or len(result.result) == 0:
+                                continue
+                            packet.append(PacketItem("get_chat", (
+                                    result["chat_id"],
+                                    result["chat_name"],
+                                    result["description"],
+                                    result["creation_date"],
+                                    result["partecipants"]
+                                )))
+                        # We send the result to the client
+                        send_ciphered_message(packet, self.client, self.identity)
+
                     case "create_chat":
                         # We expect a message with the following format:
                         # [name, users]
@@ -261,10 +307,16 @@ class ClientHandler():
                         users = item.data[2]
                         # We create the chat
                         result = self.queue.wait_for_result(self.server.create_chat(self.user, name, description, users))
-                        if result["chat_id"] > 0:
+                        if result:
                             # We send the result to the client
                             send_ciphered_message(Packet([
-                                PacketItem("chat_create_success", (result["chat_id"], result["chat_name"], result["chat_description"], result["partecipants"])),
+                                PacketItem("get_chat", (
+                                    result["chat_id"], 
+                                    result["name"], 
+                                    result["description"], 
+                                    result["creation_date"], 
+                                    result["partecipants"]
+                                )),
                             ]), self.client, self.identity)
                         else:
                             # We send the result to the client
@@ -273,8 +325,6 @@ class ClientHandler():
                             ]), self.client, self.identity)
                     
                     case "msg_send":
-                        print("msg_send from " + str(self.address) + " id " + str(self.user_id) + " name " + self.user_name + " tag " + str(self.user_tag))
-                        print(item.data)
                         # We expect a message with the following format:
                         # [chat_id, message]
                         chat_id = item.data[0]
@@ -282,6 +332,19 @@ class ClientHandler():
                         # We send the message, and don't wait for the result
                         result = self.queue.wait_for_result(self.server.send_message(self.user_id, chat_id, message))
 
+                    case "set_status":
+                        # We expect a message with the following format:
+                        # [status]
+                        user_id = self.user_id
+                        # Check that the user_id is a integer
+                        if not isinstance(user_id, int):
+                            self.server.printv("Invalid user_id received from " + str(self.address), level = 1)
+                            # We close the connection
+                            self.client.close()
+                            return
+                        status = item.data
+                        # We set the status (don't wait for the result)
+                        result = self.server.set_status(user_id, status)
 
                     
 
@@ -356,5 +419,8 @@ class ClientHandler():
                             send_ciphered_message(Packet([PacketItem("success", True), PacketItem("user_info", result["user_info"])]), self.client, self.identity)
                         else:
                             send_ciphered_message(Packet([PacketItem("success", False), PacketItem("error", result["error"])]), self.client, self.identity)
+        
+                    
+
         # We close the connection
         self.client.close()

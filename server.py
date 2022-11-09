@@ -365,6 +365,15 @@ class Server():
                     case "get_unread_messages":
                         # Get the unread messages of a chat
                         self._get_unread_messages(job)
+                    case "set_status":
+                        # Set the status of a user
+                        self._set_status(job)
+                    case "update_chats":
+                        # Update the chats of a user
+                        self._update_chats(job)
+                    case "get_chat":
+                        # Get the info of a chat
+                        self._get_chat(job)
 
                 pass
             time.sleep(WORKER_THREAD_QUEUE_CHECK_DELAY)
@@ -548,25 +557,33 @@ class Server():
             ), procedure=True)
             # Wait for the partecipant to be added
             self.queue.wait_for_result(str(job.job_tag)+"-3")
-        # Get the chat partecipants
-        query = "GET_CHAT_PARTICIPANTS"
-        response = self.dbms.query(self.queue, str(job.job_tag)+"-4", query, (
-            chat_id,
-        ), procedure=True)
-        # Wait for the partecipants to be retrieved
-        partecipants = self.queue.wait_for_result(str(job.job_tag)+"-4")
+        # # Get the chat partecipants
+        # query = "GET_CHAT_PARTICIPANTS"
+        # response = self.dbms.query(self.queue, str(job.job_tag)+"-4", query, (
+        #     chat_id,
+        # ), procedure=True)
+        # # Wait for the partecipants to be retrieved
+        # partecipants = self.queue.wait_for_result(str(job.job_tag)+"-4")
+        # # Create the response
+        # response = Response(
+        #     job_tag = job.job_tag,
+        #     result = {
+        #         "chat_id" : chat_id,
+        #         "chat_name" : job.args["name"],
+        #         "chat_description" : job.args["description"],
+        #         "partecipants" : partecipants.result
+        #     }
+        # )
+        # # Put the response in the queue
+        # self.queue.put_response(job.job_tag, response)
+        # call get_chat and wait for the response
+        chat = self.get_chat(job.args["creator"].ID, job.args["creator"].username, job.args["creator"].tag, chat_id)
+        chat = self.queue.wait_for_result(chat)
         # Create the response
         response = Response(
             job_tag = job.job_tag,
-            result = {
-                "chat_id" : chat_id,
-                "chat_name" : job.args["name"],
-                "chat_description" : job.args["description"],
-                "partecipants" : partecipants.result
-            }
+            result = chat.result
         )
-        # Put the response in the queue
-        self.queue.put_response(job.job_tag, response)
         return job.job_tag
 
     def send_message(self, user_id, chat_id, message):
@@ -644,6 +661,126 @@ class Server():
         # Put the response in the queue
         self.queue.put_response(job.job_tag, response)
         return job.job_tag
+    
+    def set_status(self, user_id, status):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "set_status",
+            args = {
+                "user_id": user_id,
+                "status": status
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _set_status(self, job):
+        """
+        The _set_status method will query the db, updating the user status.
+        It will be called by the _worker_thread function.
+        """
+        query = "Update_user_state"
+        response = self.dbms.query(self.queue, job.job_tag, query, (
+            job.args["status"],
+            job.args["user_id"]
+        ), procedure=True, fetch = False)
+        return job.job_tag
+    
+    def update_chats(self, user_id):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "update_chats",
+            args = {
+                "user_id": user_id
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _update_chats(self, job):
+        """
+        The _update_chats method will query the db, retrieving the chats in which the user is partecipant.
+        It will be called by the _worker_thread function.
+        """
+        query = "Chat_of_a_user"
+        response = self.dbms.query(self.queue, job.job_tag, query, [
+            int(job.args["user_id"])
+        ], procedure=True)
+        return job.job_tag
+    
+    def get_chat(self, user_id, user_name, user_tag, chat_id):
+        # This function will create a new job for the queue, and return the job_tag
+        # The job will be resolved by the worker threads, which will then put the response in the queue
+        job = Job(
+            type = "get_chat",
+            args = {
+                "user_id": user_id,
+                "user_name": user_name,
+                "user_tag": user_tag,
+                "chat_id": chat_id
+            }
+        )
+        job_tag = self.queue.put_request(job)
+        return job_tag
+    
+    def _get_chat(self, job):
+        """
+        The _get_chat method will query the db, retrieving the chat with the given id.
+        It will be called by the _worker_thread function.
+        """
+        # Get the chat partecipants
+        query = "GET_CHAT_PARTICIPANTS"
+        response = self.dbms.query(self.queue, str(job.job_tag)+"-1", query, [
+            job.args["chat_id"]
+        ], procedure=True)
+        # Wait for the partecipants to be retrieved
+        partecipants = self.queue.wait_for_result(str(job.job_tag)+"-1")
+        # check if the user is partecipant. The user name and user tag are the second and third element of the tuple
+        is_partecipant = False
+        for partecipant in partecipants.result:
+            if partecipant[0] == job.args["user_name"] and str(partecipant[1]) == str(job.args["user_tag"]):
+                is_partecipant = True
+                break
+        # If the user is not partecipant, return an error
+        if not is_partecipant:
+            response = Response(
+                job_tag = job.job_tag,
+                result = []
+            )
+            self.queue.put_response(job.job_tag, response)
+            return job.job_tag
+        # Retrieve chat info
+        query = "Select ID, Name, Description, Creation_date from Chat where ID = %(chat_id)s"
+        response = self.dbms.query(self.queue, str(job.job_tag)+"-2", query, {
+            "chat_id": job.args["chat_id"]
+        })
+        # Wait for the chat info to be retrieved
+        chat_info = self.queue.wait_for_result(str(job.job_tag)+"-2")
+        # If the user is not partecipant, return an error
+        if not chat_info.result or not chat_info.result[0]:
+            response = Response(
+                job_tag=job.job_tag,
+                result=[]
+            )
+            self.queue.put_response(job.job_tag, response)
+            return job.job_tag
+        # Combine a response
+        response = Response(
+            job_tag = job.job_tag,
+            result = {
+                "chat_id": chat_info.result[0][0],
+                "chat_name": chat_info.result[0][1],
+                "description": chat_info.result[0][2],
+                "creation_date": chat_info.result[0][3],
+                "partecipants": partecipants.result
+            }
+        )
+        # Put the response in the queue
+        self.queue.put_response(job.job_tag, response)
+        return job.job_tag
+
 
     def shutdown(self):
         # Shutdown the server
