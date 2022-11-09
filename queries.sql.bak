@@ -27,14 +27,31 @@ DELIMITER $$
 -- Procedure
 --
 CREATE DEFINER=`root`@`localhost` PROCEDURE `Check_log_in` (IN `User_tag` INT(11), IN `User_nick` CHAR(32), IN `User_password_` CHAR(32))  BEGIN
-SELECT *
+SELECT user.ID, user.Comunication_key
 FROM user
 WHERE IDN = User_tag AND Nick = User_nick AND User_password = User_password_;
 END$$
 
-CREATE DEFINER=`root`@`localhost` PROCEDURE `Delete_participant` (IN `User_id` INT(11), IN `Chat_id` INT(11))  BEGIN
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Delete_participant`(IN `User_tag` INT(11), IN `User_nick` CHAR(32), IN `Chat_id` INT(11))
+BEGIN
 DELETE FROM participate
-WHERE Id_user = User_id AND Id_chat = Chat_id;
+WHERE Search_user_id(User_tag,User_nick) = participate.Id_user AND Id_chat = Chat_id;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Get_chat_founder`(IN `Chat_id` INT(11))
+BEGIN
+SELECT u.ID, u.IDN,u.Nick
+FROM user u, chat c
+WHERE c.ID = Chat_id AND u.ID = c.Founder_id;
+END$$
+
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Get_chat_participants`(IN `Chat_id` INT(11))
+BEGIN
+
+SELECT u.Nick,u.IDN,p.Last_message_id
+FROM participate p, user u
+WHERE p.Id_chat = Chat_id AND u.ID = p.Id_user;
+
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `Delete_user` (IN `ID_` INT(11))  BEGIN
@@ -49,9 +66,10 @@ WHERE ID_ = user.ID;
 
 END$$
 
-CREATE DEFINER=`root`@`localhost` PROCEDURE `Insert_participant` (IN `User_id` INT(11), IN `Chat_id` INT(11))  BEGIN
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Insert_participant`(IN `User_tag` INT(11), IN `User_nick` CHAR(32), IN `Chat_id` INT(11))
+BEGIN
 INSERT INTO participate(Id_user,Id_chat)
-VALUES(User_id,Chat_id);
+VALUES(Search_user_id(User_tag,User_nick),Chat_id);
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `Message_not_received` (IN `Chat_id` INT(11), IN `User_id` INT(11))  SELECT *
