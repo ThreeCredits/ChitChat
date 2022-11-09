@@ -3,31 +3,16 @@ class User():
     The user class holds the informations about a user
     """
 
-    def __init__(self, name: str, tag: str, password: str):
+    def __init__(self, ID: int, username: str, tag: str, password: str, public_key : bytes):
         """
         The constructor of the User class
         """
-        self.name = name
+        self.username = username
         self.tag = tag
         self.password = password
+        self.ID = ID
+        self.public_key = public_key
 
-    def get_name(self):
-        """
-        Returns the name of the user
-        """
-        return self.name
-
-    def get_tag(self):
-        """
-        Returns the tag of the user
-        """
-        return self.tag
-
-    def get_password(self):
-        """
-        Returns the password of the user
-        """
-        return self.password
 
     def __str__(self):
         """

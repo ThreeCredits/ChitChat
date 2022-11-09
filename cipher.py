@@ -8,17 +8,16 @@ import json
 
 
 def send_ciphered_message(message, client, identity):
-    message = json.dumps(message)
+    message = pickle.dumps(message, protocol=5)
     message = identity.encrypt(message)
-    message = json.dumps(message)
+    message = pickle.dumps(message, protocol=5)
     client.send(message)
 
-def receive_ciphered_message(message, client, identity):
-    message = client.recv(32 * 1024)
-    message = json.loads(message)
+def receive_ciphered_message(client, identity):
+    message = client.recv(1024 * 1024)
+    message = pickle.loads(message)
     message = identity.decrypt(*message)
-    message = json.loads(message)
-
+    message = pickle.loads(message)
     return message
 
 
