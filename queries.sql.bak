@@ -72,19 +72,11 @@ INSERT INTO participate(Id_user,Id_chat)
 VALUES(Search_user_id(User_tag,User_nick),Chat_id);
 END$$
 
-CREATE DEFINER=`root`@`localhost` PROCEDURE `Messages_not_received` (IN `User_id` INT(11))  
-SELECT p.Id_chat,m.Message_number,u.Nick,u.IDN,m.Timestamp,m.Body
-FROM message m, participate p, user u
-WHERE 	u.ID = m.Id_sender
-AND	  	p.Id_user = User_id
-AND		p.Id_chat = m.Id_chat
-AND     m.Message_number > p.Last_message_id$$
-
-CREATE DEFINER=`root`@`localhost` PROCEDURE `Chat_of_a_user`(IN `User_id` INT(11))
-SELECT c.ID,c.Name
-FROM participate p, chat c
-WHERE p.Id_chat = c.ID
-AND p.Id_user = User_id$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Message_not_received` (IN `Chat_id` INT(11), IN `User_id` INT(11))  SELECT *
+FROM message m, participate p
+WHERE m.Id_chat = Chat_id
+AND p.Id_user = User_id
+AND p.Last_message_id < m.Message_number$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `Update_chat_counter` (IN `Chat_id` INT(11))  BEGIN
 UPDATE chat
