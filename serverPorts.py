@@ -250,16 +250,55 @@ class ClientHandler():
                         
                         # Send the packet
                         send_ciphered_message(packet, self.client, self.identity)
+                    case "update_chats":
+                        # We expect empty data
+                        result = self.queue.wait_for_result(self.server.update_chats(self.user_id))
+                        results = result.result
+                        # Send the result
+                        send_ciphered_message(
+                            Packet([
 
-                    case "get_chats":
-                        # We get the chats that the user is a part of
-                        # result = self.queue.wait_for_result(self.server.get_chats(self.user_id))
-                        # We send the result to the client
-                        if result["success"]:
-                            send_ciphered_message(Packet([PacketItem("success", True), PacketItem("chats", result["chats"])]), self.client, self.identity)
-                        else:
-                            send_ciphered_message(Packet([PacketItem("success", False), PacketItem("error", result["error"])]), self.client, self.identity)
+                                PacketItem("update_chats", [result.result[i][0] for i in range(len(results))])
+                            
+                            ]), self.client, self.identity)
                     
+                    case "get_chat":
+                        # We expect a chat_id
+                        chat_id = item.data
+                        result = self.queue.wait_for_result(self.server.get_chat(self.user_id, self.user_name, self.user_tag, chat_id))
+                        # If result is empty, then the user is trying to get a chat that he is not in, in which case we just ignore the request
+                        if len(result.result) == 0:
+                            continue
+                        # We send the result to the client
+                        send_ciphered_message(Packet([
+                            PacketItem("get_chat", (
+                                result["chat_id"],
+                                result["chat_name"],
+                                result["description"],
+                                result["creation_date"],
+                                result["partecipants"]
+                            )),
+                        ]), self.client, self.identity)
+                    
+                    case "get_chats":
+                        packet = Packet(data=[])
+                        # We expect a chat_id list
+                        # We get the chat
+                        for chat in item.data:
+                            result = self.queue.wait_for_result(self.server.get_chat(self.user_id, self.user_name, self.user_tag, chat))
+                            # If result is empty, then the user is trying to get a chat that he is not in, in which case we just ignore the request
+                            if not result.result or len(result.result) == 0:
+                                continue
+                            packet.append(PacketItem("get_chat", (
+                                    result["chat_id"],
+                                    result["chat_name"],
+                                    result["description"],
+                                    result["creation_date"],
+                                    result["partecipants"]
+                                )))
+                        # We send the result to the client
+                        send_ciphered_message(packet, self.client, self.identity)
+
                     case "create_chat":
                         # We expect a message with the following format:
                         # [name, users]
@@ -268,10 +307,16 @@ class ClientHandler():
                         users = item.data[2]
                         # We create the chat
                         result = self.queue.wait_for_result(self.server.create_chat(self.user, name, description, users))
-                        if result["chat_id"] > 0:
+                        if result:
                             # We send the result to the client
                             send_ciphered_message(Packet([
-                                PacketItem("chat_create_success", (result["chat_id"], result["chat_name"], result["chat_description"], result["partecipants"])),
+                                PacketItem("get_chat", (
+                                    result["chat_id"], 
+                                    result["name"], 
+                                    result["description"], 
+                                    result["creation_date"], 
+                                    result["partecipants"]
+                                )),
                             ]), self.client, self.identity)
                         else:
                             # We send the result to the client
@@ -374,5 +419,8 @@ class ClientHandler():
                             send_ciphered_message(Packet([PacketItem("success", True), PacketItem("user_info", result["user_info"])]), self.client, self.identity)
                         else:
                             send_ciphered_message(Packet([PacketItem("success", False), PacketItem("error", result["error"])]), self.client, self.identity)
+        
+                    
+
         # We close the connection
         self.client.close()
