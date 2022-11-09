@@ -78,6 +78,10 @@ class LoginManager:
             attempts = 0
             while attempts < 3:
                 message = receive_ciphered_message(client, self.server.identity)
+                if not message:
+                    # We close the connection
+                    client.close()
+                    return
                 if message[0].type == "login":
                     # Parse the rest of the message
                     username = message[0].data[0]
@@ -199,6 +203,10 @@ class ClientHandler():
         self.client.settimeout(60) # since the client is already authenticated, we can set a timeout that is longer.
         while True:
             msg = receive_ciphered_message(self.client, self.server_identity)
+            if not msg:
+                # We close the connection
+                self.client.close()
+                return
             # Check if the message is a Packet, and if its data is a non empty list
             try:
                 if not isinstance(msg, Packet) or len(msg.data) == 0:
@@ -273,8 +281,6 @@ class ClientHandler():
                             ]), self.client, self.identity)
                     
                     case "msg_send":
-                        print("msg_send from " + str(self.address) + " id " + str(self.user_id) + " name " + self.user_name + " tag " + str(self.user_tag))
-                        print(item.data)
                         # We expect a message with the following format:
                         # [chat_id, message]
                         chat_id = item.data[0]
@@ -282,6 +288,19 @@ class ClientHandler():
                         # We send the message, and don't wait for the result
                         result = self.queue.wait_for_result(self.server.send_message(self.user_id, chat_id, message))
 
+                    case "set_status":
+                        # We expect a message with the following format:
+                        # [status]
+                        user_id = self.user_id
+                        # Check that the user_id is a integer
+                        if not isinstance(user_id, int):
+                            self.server.printv("Invalid user_id received from " + str(self.address), level = 1)
+                            # We close the connection
+                            self.client.close()
+                            return
+                        status = item.data
+                        # We set the status (don't wait for the result)
+                        result = self.server.set_status(user_id, status)
 
                     
 
