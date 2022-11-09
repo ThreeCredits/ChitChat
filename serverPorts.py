@@ -247,7 +247,6 @@ class ClientHandler():
                         # Add the messages to the packet
                         for message in result:
                             packet.append(PacketItem("msg", message))
-                            print("Sending out", message, "to", self.user_name + "#" + str(self.user_tag))
                         
                         # Send the packet
                         send_ciphered_message(packet, self.client, self.identity)
