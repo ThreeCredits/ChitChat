@@ -1,5 +1,5 @@
 import sys
-sys.path.append("..")
+sys.path.append('../ChitChat')
 from message import Packet, PacketItem
 
 # Unit test for the PacketItem class

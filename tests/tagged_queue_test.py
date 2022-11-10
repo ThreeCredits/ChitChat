@@ -1,5 +1,5 @@
 import sys
-sys.path.append('..')
+sys.path.append('../ChitChat')
 
 from TaggedQueue import *
 
