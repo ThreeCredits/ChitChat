@@ -463,27 +463,6 @@ class Server():
         }, fetch=False)
         return job.job_tag
     
-    def get_chat_info(self, user, chat):
-        # This function will create a new job for the queue, and return the job_tag
-        # The job will be resolved by the worker threads, which will then put the response in the queue
-        job = Job(
-            type = "get_chat_info",
-            args = {
-                "user": user,
-                "chat": chat
-            }
-        )
-        job_tag = self.queue.put_request(job)
-        return job_tag
-    
-    def _get_chat_info(self, job):
-        """
-        The _get_chat_info method will query the db, making sure that the user is actually in the chat.
-        It will be called by the _worker_thread function.
-        """
-        # query = "Select * from chat where chatid = %(chatid)s and userid = %(userid)s"
-        pass
-    
     def get_userid_info(self, user):
         # This function will create a new job for the queue, and return the job_tag
         # The job will be resolved by the worker threads, which will then put the response in the queue
@@ -549,42 +528,41 @@ class Server():
         self.queue.wait_for_result(str(job.job_tag)+"-2")
         # Add the partecipants
         for partecipant in job.args["partecipants"]:
+            # Check if the user exists
+            query = "Select count(*) from user where nick = %(nick)s, IDN = %(idn)s"
+            response = self.dbms.query(self.queue, str(job.job_tag)+"-3", query, {
+                "nick": partecipant[0],
+                "idn": partecipant[1]
+            })
+            # Wait for the query to be resolved
+            result = self.queue.wait_for_result(str(job.job_tag)+"-3")
+            if result[0][0] == 0:
+                # User does not exist
+                response = Response (
+                    job_tag = job.job_tag,
+                    data = "User does not exist"
+                )
+                self.queue.put_response(response)
+                return job.job_tag
             query = "Insert_participant"
-            response = self.dbms.query(self.queue, str(job.job_tag)+"-3", query, (
+            response = self.dbms.query(self.queue, str(job.job_tag)+"-4", query, (
                 partecipant[1],
                 partecipant[0],
                 chat_id
             ), procedure=True)
             # Wait for the partecipant to be added
             self.queue.wait_for_result(str(job.job_tag)+"-3")
-        # # Get the chat partecipants
-        # query = "GET_CHAT_PARTICIPANTS"
-        # response = self.dbms.query(self.queue, str(job.job_tag)+"-4", query, (
-        #     chat_id,
-        # ), procedure=True)
-        # # Wait for the partecipants to be retrieved
-        # partecipants = self.queue.wait_for_result(str(job.job_tag)+"-4")
-        # # Create the response
-        # response = Response(
-        #     job_tag = job.job_tag,
-        #     result = {
-        #         "chat_id" : chat_id,
-        #         "chat_name" : job.args["name"],
-        #         "chat_description" : job.args["description"],
-        #         "partecipants" : partecipants.result
-        #     }
-        # )
-        # # Put the response in the queue
-        # self.queue.put_response(job.job_tag, response)
-        # call get_chat and wait for the response
-        chat = self.get_chat(job.args["creator"].ID, job.args["creator"].username, job.args["creator"].tag, chat_id)
-        chat = self.queue.wait_for_result(chat)
-        # Create the response
+
+        # Redirect the request to be a get_chat request
+        chat = self.queue.wait_for_result(self.get_chat(job.args["creator"].ID, job.args["creator"].username, job.args["creator"].tag, chat_id))
+        # Create the response with the original job_tag (since the job_tag was already generated, and we must use the one given to the ClientHandler)
         response = Response(
             job_tag = job.job_tag,
             result = chat.result
         )
-        return job.job_tag
+        # Put the response in the queue
+        self.queue.put_response(job.job_tag, response)
+        return chat
 
     def send_message(self, user_id, chat_id, message):
         # This function will create a new job for the queue, and return the job_tag
@@ -814,6 +792,3 @@ if __name__ == "__main__":
             print("ID of created user is", response.get(0)[0])
     # Shutdown the server
     server.shutdown()
-
-
-

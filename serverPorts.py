@@ -92,14 +92,14 @@ class LoginManager:
                     # Wait for the job to finish
                     result = queue.wait_for_result(server.login(username, tag, password))
                     # If the result is None, then the login failed
-                    if result is None:
+                    if result.result is None or len(result.result) == 0:
                         # Send a failure message
                         send_ciphered_message( Packet(
                             [
                                 PacketItem("success", False)
                             ]
                         ), client, self.server.identity)
-                        attempts += 1
+
                     # Parse the result
                     else:
                         # Create response
@@ -307,12 +307,12 @@ class ClientHandler():
                         users = item.data[2]
                         # We create the chat
                         result = self.queue.wait_for_result(self.server.create_chat(self.user, name, description, users))
-                        if result:
+                        if result and result.result != "User does not exist":
                             # We send the result to the client
                             send_ciphered_message(Packet([
                                 PacketItem("get_chat", (
                                     result["chat_id"], 
-                                    result["name"], 
+                                    result["chat_name"],
                                     result["description"], 
                                     result["creation_date"], 
                                     result["partecipants"]
@@ -321,7 +321,7 @@ class ClientHandler():
                         else:
                             # We send the result to the client
                             send_ciphered_message( Packet( [
-                                PacketItem("chat_create_fail", None)
+                                PacketItem("chat_create_fail", result.result)
                             ]), self.client, self.identity)
                     
                     case "msg_send":
