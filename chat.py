@@ -21,6 +21,7 @@ class Chat:
         self.chat_name: str = chat_name
         self.description: str = description
         self.users: List[Tuple[str, int, int]] = users
+        self.creation_date = creation_date
         self.messages: List[ChatMessage] = []
 
     
