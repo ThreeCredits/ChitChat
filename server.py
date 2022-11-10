@@ -222,9 +222,6 @@ class Server():
         # Print startup message
         self.printv("Starting server...", level = 0)
 
-        # Connect to DBMS
-        self.printv("Connecting to DBMS...", level = 1)
-
         # We store the configuration of the database
         self.db_config = {
             "host": self.dbhost,
@@ -536,8 +533,14 @@ class Server():
                 "idn": partecipant[1]
             })
             # Wait for the query to be resolved
+            
             result = self.queue.wait_for_result(str(job.job_tag)+"-3")
             if result[0][0] == 0:
+                # Delete the chat
+                query = "delete_chat"
+                response = self.dbms.query(self.queue, str(job.job_tag)+"-1", query, [
+                    chat_id
+                ], procedure=True, fetch=False) # Don't wait for the result
                 # User does not exist
                 response = Response (
                     job_tag = job.job_tag,
@@ -768,7 +771,7 @@ class Server():
         for i in range(len(self.worker_signals)):
             self.worker_signals[i] = 1
         # Exit
-        sys.exit(0)
+        quit()
         return
 
 if __name__ == "__main__":
@@ -783,12 +786,5 @@ if __name__ == "__main__":
             server.shutdown()
         if command == "shutdown":
             server.shutdown()
-        elif command == "register":
-            username = input("Username: ")
-            password = input("Password: ")
-            job_tag = server.register(username, password)
-            response = server.queue.wait_for_result(job_tag)
-            print(response)
-            print("ID of created user is", response.get(0)[0])
     # Shutdown the server
     server.shutdown()
