@@ -1,5 +1,3 @@
-import sys
-sys.path.append("..")
 from User import User
 from typing import List, Dict
 import random
