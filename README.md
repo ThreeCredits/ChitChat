@@ -4,6 +4,7 @@ ChitChat is an open source cross-platform instant messaging application, that gi
 ## Quickstart
 
 ### Application usage
+First, make sure you have all the required python modules installed by running `pip install -r requirements.txt`.
 Upon starting `main.py`, you will be presented with the following screen:<p>
 ![immagine](https://user-images.githubusercontent.com/64363733/201195556-92dc3066-1835-40dc-a039-eab349bb4521.png)<p>
 Insert the server and port of the server you want to connect with.<p>
@@ -33,6 +34,24 @@ You will be presented with this.
 Insert a chat name, chat description, username and user tag and you are ready to go!  
 Note that, while the description is not yet visualized in the GUI, it is still stored on both server and client files, so that you won't lose the descriptions and you will be hopefully be able to see them in a release or two.  
 If the user you selected does not exist, an error will show. Else, the chat will be created, and will pop up in your chats.
+### Using the chats
+This is a typical chat screen.<p>
+![immagine](https://user-images.githubusercontent.com/64363733/201210712-2931c1a2-f619-481e-ad6b-bd46c4fa7052.png)<p>
+If you need help understanding how to use that, you should not use this app.  
+
+## Server setup
+First, make sure you have all the required python modules installed by running `pip install -r requirements.txt`.
+Then, make sure your database management system is open to connections from your local machine.
+Create a database named "chitchat" using a mysql engine. We used `MariaDB`, but you may be able to make it work with other engines.  
+Run in order:  
+- `Tables.sql`
+- `queries.sql`
+This setup needs to be only done once.
+
+### Starting the server
+To start the server simply execute `server.py`. The server should be ready and running.
+
+
 
 
 
