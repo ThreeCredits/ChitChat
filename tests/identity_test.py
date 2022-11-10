@@ -4,7 +4,7 @@ import sys
 
 from pytest_mock import MockFixture
 
-sys.path.append('..')
+sys.path.append('../ChitChat')
 from cipher import *
 from identity import *
 

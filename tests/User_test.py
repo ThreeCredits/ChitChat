@@ -1,12 +1,12 @@
 import sys
-sys.path.append("..")
+sys.path.append('../ChitChat')
 from User import User
 from typing import List, Dict
 import random
 import string
 
 # Unit test for the User class
-
+sys.path.append('../ChitChat')
 # Constructor test
 def test_constructor():
     user = User(1, "test", "1234", "password", b"public_key")
