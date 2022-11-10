@@ -129,6 +129,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+=======
+test scripts/
 generate_icons.py
 note.txt
 e2ee.py
