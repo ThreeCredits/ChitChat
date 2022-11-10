@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../ChitChat')
 from User import User
 from typing import List, Dict
 import random
