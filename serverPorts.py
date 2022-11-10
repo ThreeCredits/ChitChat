@@ -310,7 +310,7 @@ class ClientHandler():
                         if result and result.result != "User does not exist":
                             # We send the result to the client
                             send_ciphered_message(Packet([
-                                PacketItem("get_chat", (
+                                PacketItem("create_chat_success", (
                                     result["chat_id"], 
                                     result["chat_name"],
                                     result["description"], 
@@ -321,7 +321,7 @@ class ClientHandler():
                         else:
                             # We send the result to the client
                             send_ciphered_message( Packet( [
-                                PacketItem("chat_create_fail", result.result)
+                                PacketItem("create_chat_fail", result.result)
                             ]), self.client, self.identity)
                     
                     case "msg_send":
