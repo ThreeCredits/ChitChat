@@ -1,12 +1,13 @@
-from typing import Tuple
+import struct
+from typing import Tuple, Any
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
+from datetime import datetime
+from message import*
 import base64
 import json
-from message import *
-from datetime import datetime
 
 
 def serialize_(obj: Any) -> Any:
@@ -15,6 +16,7 @@ def serialize_(obj: Any) -> Any:
         obj[i] = base64.b64encode(obj[i]).decode('ascii')
     obj = tuple(obj)
     return json.dumps(obj, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+
 
 def serialize(obj: Packet) -> str:
     for i in range(obj.data.__len__()):
@@ -38,6 +40,7 @@ def deserialize_(obj: Any) -> Any:
     for i in range(len(obj)):
         obj[i] = base64.b64decode(obj[i])
     return tuple(obj)
+
 
 def deserialize(obj: str) -> Packet:
     obj_ = json.loads(obj)
@@ -64,21 +67,47 @@ def deserialize(obj: str) -> Packet:
 
     return Packet(items)
 
-def send_ciphered_message(message, client, identity):
+
+def send_ciphered_message(message: Packet, client, identity) -> None:
     message = serialize(message)
     message = message.encode()
     message = identity.encrypt(message)
     message = serialize_(message)
-    #client.send(message)
-    return message
+    # Prefix each message with a 4-byte length (network byte order)
+    message = struct.pack('>I', len(message)) + message
+    client.send(message)
 
-def receive_ciphered_message(message, client, identity):
-    #message = client.recv(32 * 1024)
+
+def receive_all(client, length):
+    data = bytearray()
+    while len(data) < length:
+        packet = client.recv(length - len(data))
+        if not packet:
+            return None
+        data.extend(packet)
+    return data
+
+
+def _receive_chipered_message(client):
+    # Read message length and unpack it into an integer
+    try:
+        raw_msglen = receive_all(client, 4)
+        if not raw_msglen:
+            raise Exception("Missing message length header")
+    except:
+        return None
+    msglen = struct.unpack('>I', raw_msglen)[0]
+    # Read the message data
+    return receive_all(client, msglen)
+
+
+def receive_ciphered_message(client, identity):
+    # Receive a large message, which may have been split into multiple packets
+    message = _receive_chipered_message(client)
     message = deserialize_(message)
     message = identity.decrypt(*message)
     message = message.decode()
     message = deserialize(message)
-
     return message
 
 
