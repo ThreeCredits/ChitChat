@@ -724,9 +724,12 @@ def in_handler(gui: NoFrame) -> None:
                         gui.chats[item.data[0]].update(chat_name = item.data[1], description = item.data[2], users = item.data[4])
                     else:
                         gui.chats[item.data[0]] = (Chat(item.data[0], item.data[1], item.data[2], item.data[3], users = item.data[4]))
+                    gui.newchat_error.configure(text = "")
+                    gui.close_new_chat_menu()
                     reload_chat_previews = True
 
             elif item.type == "msg":#TODO costanti TODO ordinare per data
+                    reload_chat_previews = True
                     #print("received message", item.data)
                     msg = ChatMessage(number = item.data[1], author = (item.data[2], item.data[3]), date = item.data[4], content = item.data[5].decode("utf-8"))
                     if item.data[0] not in gui.chats:
@@ -772,11 +775,10 @@ def in_handler(gui: NoFrame) -> None:
             elif item.type == "create_chat_fail":
                     if not item.data[0]:
                         err = "Something went wrong"
-                        
-                            
                     else:
-                        err = item.data[0]
+                        err = "User does not exist" #TODO per qualche motivo spunta solo U in item.data[0]
                     if gui.is_new_chat_menu_open:
+                        print("chat create error", err)
                         gui.newchat_error.config(text = err)
         if reload_chat_previews:
             gui.load_chat_previews()
@@ -895,14 +897,13 @@ class LoggedGUI(NoFrame):
 
         user_tag_frame = tk.Frame(self.newchat_frame, bg = "#F0F0F0")
         user_tag_frame.grid_columnconfigure(0, weight = 2)
-        user_tag_frame.grid_columnconfigure(1, weight = 0)
-        user_tag_frame.grid_columnconfigure(2, weight = 1)
+        user_tag_frame.grid_columnconfigure(1, weight = 1)
         user_tag_frame.pack(padx = 10, pady = 3, fill = tk.X)
 
         user_frame = tk.Frame(user_tag_frame, bg = "#F0F0F0")
         user_frame.grid(row = 0, column = 0, sticky = "news")
         tk.Label(user_frame, text = "User", bg = "#F0F0F0", fg = APP_MAIN_COLOR, font = (APP_FONT, 9, "bold")).pack(anchor = "w")
-        self.newchat_user = tk.Entry(user_frame, selectbackground = APP_MAIN_COLOR,width = 0, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.newchat_user = tk.Entry(user_frame, selectbackground = APP_MAIN_COLOR,width = 17, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.newchat_user.pack(anchor = "w", fill = tk.X)
         
         tk.Label(user_tag_frame, text = "", bg = "#F0F0F0").grid(row = 0, column = 1)
@@ -910,11 +911,12 @@ class LoggedGUI(NoFrame):
         tag_frame = tk.Frame(user_tag_frame, bg = "#F0F0F0")
         tag_frame.grid(row = 0, column = 2, sticky = "news")
         tk.Label(tag_frame, text = "TAG", bg = "#F0F0F0", fg = APP_MAIN_COLOR, font = (APP_FONT, 9, "bold")).pack(anchor = "w")
-        self.newchat_tag = tk.Entry(tag_frame, selectbackground = APP_MAIN_COLOR,width = 0, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
+        self.newchat_tag = tk.Entry(tag_frame, selectbackground = APP_MAIN_COLOR,width = 8, background = APP_BG_COLOR, border = 0, highlightthickness=1, highlightcolor = APP_MAIN_COLOR, highlightbackground= APP_MAIN_COLOR,font = (APP_FONT, 12))
         self.newchat_tag.pack(anchor = "w", fill = tk.X)
         
 
-        self.newchat_error = tk.Label(self.newchat_frame, text = "test", fg = "#DF2C2C",bg = "#F0F0F0", font = (APP_FONT, 1, "bold")).pack()
+        self.newchat_error = tk.Label(self.newchat_frame, text = "", fg = "#DF2C2C",bg = "#F0F0F0", font = (APP_FONT, 9, "bold"))
+        self.newchat_error.pack()
 
         tk.Frame(self.newchat_frame, bg = APP_MAIN_COLOR_DARK).pack(fill = tk.X) # horizontal separator
         tk.Button(self.newchat_frame, text = "Create chat", bg = APP_MAIN_COLOR, activebackground = APP_MAIN_COLOR_DARK, fg = APP_BG_COLOR, activeforeground = APP_BG_COLOR, border = 0, font = (APP_FONT, 9, "bold"), command = self.new_chat).pack(fill = tk.X)
