@@ -323,7 +323,7 @@ class MessageFrame(tk.Frame):
         if message.date.strftime("%m/%d/%Y") == datetime.datetime.now().strftime("%m/%d/%Y"):
             date = "today at " + message.date.strftime("%H:%M")
         else:
-            date = message.date.strftime("%m/%d/%Y")
+            date = message.date.strftime("%d/%m/%Y")
         if type(message.content) == str:
             msg_frame = tk.Frame(self, bg = APP_MAIN_COLOR)
             name_date_frame = tk.Frame(msg_frame, bg = APP_MAIN_COLOR)
