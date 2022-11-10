@@ -319,9 +319,10 @@ class ClientHandler():
                                 )),
                             ]), self.client, self.identity)
                         else:
+                            print(result.result)
                             # We send the result to the client
                             send_ciphered_message( Packet( [
-                                PacketItem("create_chat_fail", result.result)
+                                PacketItem("create_chat_fail", None if result is None else result.result)
                             ]), self.client, self.identity)
                     
                     case "msg_send":
