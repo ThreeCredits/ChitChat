@@ -129,9 +129,18 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-tests/
+=======
+test scripts/
 generate_icons.py
 note.txt
 e2ee.py
-cipher.py
-message.py
+.keys/
+chats.txt
+
+# Ngrok utilities
+ngrok.exe
+ngrok
+startngrok
+startngrok.bat
+startngrok.sh
+
