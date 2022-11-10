@@ -1,6 +1,5 @@
 from typing import *
 
-
 class PacketItem:
     """
     The PacketItem class is the standard item for the Packet class.
